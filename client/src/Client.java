@@ -82,7 +82,6 @@ public class Client {
         public boolean toServerhandler(String command,Scanner sc){
             try {
                 if (command.equals("rp")) { // easies way of stopping blocking scanner is using if clause
-                    System.out.println("reset nigga");
                     this.out.writeUTF(command); // send command
                     command = sc.nextLine(); // read new password
                     this.out.writeUTF(command); // send it
@@ -125,7 +124,6 @@ public class Client {
                     e.printStackTrace();
                 }
             }
-            System.out.println("leaving recv");
         }
 
         /**
