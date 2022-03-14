@@ -25,7 +25,7 @@ class Connection extends Thread {
     private DataInputStream in;
     private DataOutputStream out;
     private Socket clientSocket;
-    private String currentDir = "";
+    private String Username;
 
     public Connection (Socket aClientSocket) {
         try{
@@ -39,9 +39,13 @@ class Connection extends Thread {
     public void run(){
         try {
             login();
+            String response = "server > ";
+            String fromClient;
             while(true){
-                out.writeUTF("Test: ");
-                in.readUTF();
+                out.writeUTF(response);
+                fromClient = in.readUTF();
+                response = commandHandler(fromClient);
+
             }
         } catch(EOFException e) {
             System.out.println("EOF:" + e);
@@ -62,8 +66,10 @@ class Connection extends Thread {
                 contents = getUsernameAndPassword(in.readUTF());
                 if(contents.size()==0)
                     out.writeUTF("Username not found\n");
-                else
-                    foundUsername=true;
+                else {
+                    Username = contents.get(0);
+                    foundUsername = true;
+                }
 
             }
             while(!passwordValid) {
@@ -101,5 +107,65 @@ class Connection extends Thread {
         }
 
         return usernameAndPassord;
+    }
+
+    public boolean changePassword(String username, String newPassword) {
+        // ver se a password é valida?
+        ArrayList<String> lines = new ArrayList<>();
+        boolean changed = false;
+        try {
+            String BASE_DIR = System.getProperty("user.dir");
+            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            Scanner reader = new Scanner(file);
+            while (reader.hasNextLine()) {
+                String user = reader.nextLine();
+                String[] info = user.split(" / ");
+                if (info[0].equals(username)) {
+                    user = info[0] + " / " + newPassword;
+                    changed = true;
+                }
+                lines.add(user);
+            }
+            reader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients/clients.txt");
+            for (String s: lines) {
+                fileWriter.write(s + "\n");
+            }
+            fileWriter.close();
+
+        } catch (FileNotFoundException e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return changed;
+    }
+
+    public boolean newPasswordRequest() throws IOException {
+        try {
+            out.writeUTF("server > new password: ");
+            String newpass = in.readUTF();
+            if(changePassword(Username, newpass))
+                return true;
+
+        }
+        catch(IOException e) {
+            System.out.println("IO:" + e);
+        }
+        return false;
+    }
+
+    public String commandHandler(String command) throws IOException {
+        if(command.equals("rp")){
+            if(newPasswordRequest())
+                return "/reconnect";
+            else{
+                out.writeUTF("server > an error as ocorrued");
+            }
+        }
+        return "invalid command\n";
     }
 }
