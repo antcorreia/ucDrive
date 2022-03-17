@@ -5,10 +5,21 @@ import java.util.Scanner;
 
 public class Server{
 
-    public static void main(String args[]){
-        String serverAdress;
-        int serverPort = 6000;
-        try (ServerSocket listenSocket = new ServerSocket(serverPort)) {
+    public static void main(String[] args){
+        Scanner sc = new Scanner(System.in);
+
+        String serverAddress;
+        int serverPort;
+
+        ArrayList<String> connectionInfo = getConnectionInfo(sc);
+        serverAddress = connectionInfo.get(0);
+        serverPort = Integer.parseInt(connectionInfo.get(1));
+
+        try {
+            ServerSocket listenSocket = new ServerSocket();
+            SocketAddress sockaddr = new InetSocketAddress(serverAddress, serverPort);
+            listenSocket.bind(sockaddr);
+
             System.out.println("Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
                 Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
@@ -18,6 +29,23 @@ public class Server{
         } catch(IOException e) {
             System.out.println("Listen: " + e.getMessage());
         }
+    }
+
+    public static ArrayList<String> getConnectionInfo(Scanner sc) {
+        ArrayList<String> info = new ArrayList<>();
+
+        System.out.print("Insert the Primary Server IP Address: ");
+        info.add(sc.nextLine());
+        System.out.print("Insert the Primary Server Port: ");
+        info.add(sc.nextLine());
+
+
+        /*System.out.print("Insert the Secondary Server IP Address: ");
+        info.add(sc.nextLine());
+        System.out.print("Insert the Secondary Server Port: ");
+        info.add(sc.nextLine());*/
+
+        return info;
     }
 }
 
@@ -99,6 +127,8 @@ class Connection extends Thread {
     public ArrayList<String> getUsernameAndPassword(String username) {
         ArrayList<String> usernameAndPassord = new ArrayList<>();
         try {
+            wait();
+
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients/clients.txt");
             Scanner reader = new Scanner(file);
@@ -115,6 +145,8 @@ class Connection extends Thread {
         } catch (FileNotFoundException e) {
             System.out.println("File not found.");
             e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
         return usernameAndPassord;
@@ -125,6 +157,8 @@ class Connection extends Thread {
         ArrayList<String> lines = new ArrayList<>();
         boolean changed = false;
         try {
+            wait();
+
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients/clients.txt");
             Scanner reader = new Scanner(file);
@@ -148,14 +182,14 @@ class Connection extends Thread {
         } catch (FileNotFoundException e) {
             System.out.println("An error occurred.");
             e.printStackTrace();
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
 
         return changed;
     }
 
-    public boolean newPasswordRequest() throws IOException {
+    public boolean newPasswordRequest() {
         try {
             out.writeUTF("server > new password: ");
             String newpass = in.readUTF();

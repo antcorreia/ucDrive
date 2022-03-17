@@ -9,11 +9,11 @@ public class Client {
 
     private static boolean reconnect = true;
 
-    public static void main(String args[]) {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
         String serverAddress;
         int serverSocket;
-
-        Scanner sc = new Scanner(System.in);
 
         ArrayList<String> connectionInfo = getConnectionInfo(sc);
         serverAddress = connectionInfo.get(0);
