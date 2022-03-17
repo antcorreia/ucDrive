@@ -6,13 +6,13 @@ import java.util.Scanner;
 public class Server{
 
     public static void main(String args[]){
-
+        String serverAdress;
         int serverPort = 6000;
         try (ServerSocket listenSocket = new ServerSocket(serverPort)) {
             System.out.println("Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
                 Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
-                System.out.println("Client connected, clientsocket ="+clientSocket);
+                System.out.println("Client connected, clientsocket = "+clientSocket);
                 new Connection(clientSocket);
             }
         } catch(IOException e) {
@@ -47,7 +47,7 @@ class Connection extends Thread {
                     break;
                 }
                 fromClient = in.readUTF();
-                System.out.println("DEBUG: from client :"+fromClient);
+                System.out.println("DEBUG: from client: "+fromClient);
                 response = commandHandler(fromClient);
 
             }

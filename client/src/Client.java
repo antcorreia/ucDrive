@@ -1,4 +1,5 @@
 import java.net.*;
+import java.util.ArrayList;
 import java.util.Scanner;
 import java.io.*;
 import java.util.concurrent.BlockingQueue;
@@ -6,23 +7,23 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class Client {
 
-    private static int serversocket = 6000;
     private static boolean reconnect = true;
 
     public static void main(String args[]) {
-        // args[0] <- hostname of destination
-        if (args.length == 0) {
-            System.out.println("USAGE: java Client hostname");
-            System.exit(0);
-        }
+        String serverAddress;
+        int serverSocket;
 
         Scanner sc = new Scanner(System.in);
+
+        ArrayList<String> connectionInfo = getConnectionInfo(sc);
+        serverAddress = connectionInfo.get(0);
+        serverSocket = Integer.parseInt(connectionInfo.get(1));
 
         while(reconnect) {
             // reconnection starts at false, if eventually is need turn true in specificr region
             reconnect = false;
             // criar socket
-            try (Socket s = new Socket(args[0], serversocket)) {
+            try (Socket s = new Socket(serverAddress, serverSocket)) {
                 System.out.println("SOCKET=" + s);
 
                 DataInputStream in = new DataInputStream(s.getInputStream());
@@ -52,6 +53,23 @@ public class Client {
                 e.printStackTrace();
             }
         }
+    }
+
+    public static ArrayList<String> getConnectionInfo(Scanner sc) {
+        ArrayList<String> info = new ArrayList<>();
+
+        System.out.print("Insert the Primary Server IP Address: ");
+        info.add(sc.nextLine());
+        System.out.print("Insert the Primary Server Port: ");
+        info.add(sc.nextLine());
+
+
+        /*System.out.print("Insert the Secondary Server IP Address: ");
+        info.add(sc.nextLine());
+        System.out.print("Insert the Secondary Server Port: ");
+        info.add(sc.nextLine());*/
+
+        return info;
     }
 
     static class Sender extends Thread {
