@@ -43,10 +43,20 @@ class Connection extends Thread {
             String fromClient;
             while(true){
                 out.writeUTF(response);
+
+                if(response.equals("/reconnect")){
+                    break;
+                }
+
                 fromClient = in.readUTF();
                 response = commandHandler(fromClient);
 
             }
+
+            clientSocket.close();
+            in.close();
+            out.close();
+
         } catch(EOFException e) {
             System.out.println("EOF:" + e);
         } catch(IOException e) {
@@ -160,8 +170,9 @@ class Connection extends Thread {
 
     public String commandHandler(String command) throws IOException {
         if(command.equals("rp")){
-            if(newPasswordRequest())
+            if(newPasswordRequest()) {
                 return "/reconnect";
+            }
             else{
                 out.writeUTF("server > an error as ocorrued");
             }

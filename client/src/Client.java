@@ -37,6 +37,9 @@ public class Client {
                 recv.join();
                 send.join();
 
+                s.close();
+                in.close();
+                out.close();
                 System.out.println("leaving server");
 
             } catch (UnknownHostException e) {
