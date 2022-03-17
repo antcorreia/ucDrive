@@ -43,12 +43,11 @@ class Connection extends Thread {
             String fromClient;
             while(true){
                 out.writeUTF(response);
-
-                if(response.equals("/reconnect")){
+                if(response.equals("/reconnect") || response.equals("/exit")){
                     break;
                 }
-
                 fromClient = in.readUTF();
+                System.out.println("DEBUG: from client :"+fromClient);
                 response = commandHandler(fromClient);
 
             }
@@ -56,6 +55,8 @@ class Connection extends Thread {
             clientSocket.close();
             in.close();
             out.close();
+
+            System.out.println("DEBUG: Client " + clientSocket +" left");
 
         } catch(EOFException e) {
             System.out.println("EOF:" + e);
@@ -107,7 +108,7 @@ class Connection extends Thread {
                 if (info[0].equals(username)) {
                     usernameAndPassord.add(info[0]);
                     usernameAndPassord.add(info[1]);
-                    System.out.printf("Username: %s | Password: %s\n", usernameAndPassord.get(0), usernameAndPassord.get(1));
+                    System.out.printf("DEBUG: Username: %s | Password: %s\n", usernameAndPassord.get(0), usernameAndPassord.get(1));
                 }
             }
             reader.close();
@@ -176,6 +177,9 @@ class Connection extends Thread {
             else{
                 out.writeUTF("server > an error as ocorrued");
             }
+        }
+        else if(command.equals("exit")){
+            return "/exit";
         }
         return "invalid command\n";
     }

@@ -70,30 +70,30 @@ public class Client {
             try  {
                 while (true) {
                     String line = sc.nextLine();
+                    this.out.writeUTF(line);
                     if(toServerhandler(line,sc)) { // only way of stopping blocking scanner is to handle input
                         break;
                     }
-                    this.out.writeUTF(line);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
 
         }
 
         public boolean toServerhandler(String command,Scanner sc){
             try {
                 if (command.equals("rp")) { // easies way of stopping blocking scanner is using if clause
-                    this.out.writeUTF(command); // send command
                     command = sc.nextLine(); // read new password
                     this.out.writeUTF(command); // send it
                     // an error as ocurred
                     return queue.take();
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
+                else if (command.equals("exit")){
+                    return true;
+                }
+
+            } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
             }
             return false;
@@ -117,16 +117,19 @@ public class Client {
                     String fromServer = in.readUTF();
                     if(fromServer.charAt(0)=='/'){
                         if(fromServerHandler(fromServer))
-                            queue.put(true);
                             break;
                     }
                     else{
                         System.out.print(fromServer);
                     }
-                } catch (IOException | InterruptedException e) {
+                } catch (EOFException e) {
+                System.out.println("EOF:" + e.getMessage());}
+                catch (IOException e) {
                     e.printStackTrace();
                 }
+
             }
+
         }
 
         /**
@@ -137,9 +140,16 @@ public class Client {
         public boolean fromServerHandler(String command){
             if (command.equals("/reconnect")){
                 reconnect = true;
+                try {
+                    queue.put(true);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
                 return true;
             }
-
+            else if (command.equals("/exit")){
+                return true;
+            }
             // outros commandos q possam vir a aparecer
 
             return false;
