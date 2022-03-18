@@ -15,6 +15,8 @@ public class Server{
         serverAddress = connectionInfo.get(0);
         serverPort = Integer.parseInt(connectionInfo.get(1));
 
+        FileAccess FA = new FileAccess();
+
         try {
             ServerSocket listenSocket = new ServerSocket();
             SocketAddress sockaddr = new InetSocketAddress(serverAddress, serverPort);
@@ -24,7 +26,7 @@ public class Server{
             while(true) {
                 Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
                 System.out.println("Client connected, clientsocket = "+clientSocket);
-                new Connection(clientSocket);
+                new Connection(clientSocket, FA);
             }
         } catch(IOException e) {
             System.out.println("Listen: " + e.getMessage());
@@ -49,17 +51,115 @@ public class Server{
     }
 }
 
+class FileAccess {
+
+    Semaphore sem = new Semaphore(1);
+
+    public ArrayList<String> getUserInfo(String username) {
+
+        ArrayList<String> userinfo = new ArrayList<>();
+        try {
+            sem.doWait();
+            String BASE_DIR = System.getProperty("user.dir");
+            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            Scanner reader = new Scanner(file);
+            while (reader.hasNextLine()) {
+                String user = reader.nextLine();
+                String[] info = user.split(" / ");
+                if (info[0].equals(username)) {
+                    userinfo.add(info[0]); // username
+                    userinfo.add(info[1]); // pass
+                    userinfo.add(info[2]); // last dir
+                    System.out.printf("DEBUG: Username: %s | Password: %s\n", userinfo.get(0), userinfo.get(1));
+                }
+            }
+            reader.close();
+        } catch (FileNotFoundException e) {
+            System.out.println("File not found.");
+            e.printStackTrace();
+        }
+        sem.doSignal();
+        return userinfo;
+    }
+
+    public  boolean changePassword(String username, String newPassword) {
+        // ver se a password é valida?
+        ArrayList<String> lines = new ArrayList<>();
+        boolean changed = false;
+        try {
+            sem.doWait();
+            String BASE_DIR = System.getProperty("user.dir");
+            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            Scanner reader = new Scanner(file);
+            while (reader.hasNextLine()) {
+                String user = reader.nextLine();
+                String[] info = user.split(" / ");
+                if (info[0].equals(username)) {
+                    user = info[0] + " / " + newPassword;
+                    changed = true;
+                }
+                lines.add(user);
+            }
+            reader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients/clients.txt");
+            for (String s: lines) {
+                fileWriter.write(s + "\n");
+            }
+            fileWriter.close();
+
+        } catch (FileNotFoundException e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        sem.doSignal();
+        return changed;
+    }
+
+
+}
+
+class Semaphore {
+
+    int val;
+
+    public Semaphore(int val) {
+        this.val = val;
+    }
+
+    public synchronized void doSignal() {
+        val++;
+        notify();
+    }
+
+    public synchronized void doWait() {
+        while (val <= 0) {
+            try {
+                wait();
+            }
+            catch (InterruptedException e) {
+            }
+        }
+        val--;
+    }
+}
+
 class Connection extends Thread {
     private DataInputStream in;
     private DataOutputStream out;
     private Socket clientSocket;
     private String Username;
+    private String currentDir;
+    private FileAccess fa;
 
-    public Connection (Socket aClientSocket) {
+    public Connection (Socket aClientSocket, FileAccess FA) {
         try{
             clientSocket = aClientSocket;
             in = new DataInputStream(clientSocket.getInputStream());
             out = new DataOutputStream(clientSocket.getOutputStream());
+            fa = FA;
             this.start();
         }catch(IOException e){System.out.println("Connection: " + e.getMessage());}
     }
@@ -67,7 +167,8 @@ class Connection extends Thread {
     public void run(){
         try {
             login();
-            String response = "server > ";
+
+            String response = "server" + currentDir + "> ";
             String fromClient;
             while(true){
                 out.writeUTF(response);
@@ -96,13 +197,14 @@ class Connection extends Thread {
     public void login(){
 
         try{
+
             ArrayList<String> contents = new ArrayList<>();
             boolean foundUsername = false;
             boolean passwordValid = false;
 
             while(!foundUsername) {
                 out.writeUTF("Insert Username: ");
-                contents = getUsernameAndPassword(in.readUTF());
+                contents = fa.getUserInfo(in.readUTF());
                 if(contents.size()==0)
                     out.writeUTF("Username not found\n");
                 else {
@@ -118,82 +220,26 @@ class Connection extends Thread {
                 else
                     out.writeUTF("Wrong Password\n");
             }
+
+            currentDir = contents.get(2);
+            String BASE_DIR = System.getProperty("user.dir");
+            File directory = new File(BASE_DIR + "/" +currentDir);
+            if (! directory.exists()){
+                directory.mkdir();
+            }
+
+
         } catch (IOException e) {
             e.printStackTrace();
         }
 
     }
 
-    public ArrayList<String> getUsernameAndPassword(String username) {
-        ArrayList<String> usernameAndPassord = new ArrayList<>();
-        try {
-            wait();
-
-            String BASE_DIR = System.getProperty("user.dir");
-            File file = new File(BASE_DIR + "/home/clients/clients.txt");
-            Scanner reader = new Scanner(file);
-            while (reader.hasNextLine()) {
-                String user = reader.nextLine();
-                String[] info = user.split(" / ");
-                if (info[0].equals(username)) {
-                    usernameAndPassord.add(info[0]);
-                    usernameAndPassord.add(info[1]);
-                    System.out.printf("DEBUG: Username: %s | Password: %s\n", usernameAndPassord.get(0), usernameAndPassord.get(1));
-                }
-            }
-            reader.close();
-        } catch (FileNotFoundException e) {
-            System.out.println("File not found.");
-            e.printStackTrace();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        return usernameAndPassord;
-    }
-
-    public boolean changePassword(String username, String newPassword) {
-        // ver se a password é valida?
-        ArrayList<String> lines = new ArrayList<>();
-        boolean changed = false;
-        try {
-            wait();
-
-            String BASE_DIR = System.getProperty("user.dir");
-            File file = new File(BASE_DIR + "/home/clients/clients.txt");
-            Scanner reader = new Scanner(file);
-            while (reader.hasNextLine()) {
-                String user = reader.nextLine();
-                String[] info = user.split(" / ");
-                if (info[0].equals(username)) {
-                    user = info[0] + " / " + newPassword;
-                    changed = true;
-                }
-                lines.add(user);
-            }
-            reader.close();
-
-            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients/clients.txt");
-            for (String s: lines) {
-                fileWriter.write(s + "\n");
-            }
-            fileWriter.close();
-
-        } catch (FileNotFoundException e) {
-            System.out.println("An error occurred.");
-            e.printStackTrace();
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        return changed;
-    }
-
     public boolean newPasswordRequest() {
         try {
             out.writeUTF("server > new password: ");
             String newpass = in.readUTF();
-            if(changePassword(Username, newpass))
+            if(fa.changePassword(Username, newpass))
                 return true;
 
         }
@@ -204,6 +250,8 @@ class Connection extends Thread {
     }
 
     public String commandHandler(String command) throws IOException {
+
+
         if(command.equals("rp")){
             if(newPasswordRequest()) {
                 return "/reconnect";
@@ -215,6 +263,35 @@ class Connection extends Thread {
         else if(command.equals("exit")){
             return "/exit";
         }
+
+        else if(command.substring(0,2).equals("cd")){
+            if(command.equals("cd")){
+                currentDir = Username + "/home";
+                return "server /" + currentDir +" > " ;
+            }
+            else{
+                String nextCommand = command.substring(3,command.length());
+                if(nextCommand.equals(" ..")){
+                    if(currentDir.equals(Username+"/home")){
+                        return "server /" + currentDir + ">";
+                    }
+                    currentDir = currentDir.substring(0,currentDir.lastIndexOf("/"));
+                    return "server /" + currentDir +" > " ;
+                }
+                if(nextCommand.substring(0,2).equals(" /")){
+                    String nextDir = nextCommand.substring(2,nextCommand.length());
+                    String BASE_DIR = System.getProperty("user.dir");
+                    File directory = new File(BASE_DIR + "/" +currentDir + "/" + nextDir);
+                    if (! directory.exists()) {
+                        currentDir = currentDir + "/" + nextDir;
+                        return "server /" + currentDir +" > " ;
+                    }
+                }
+            }
+
+        }
+
+
         return "invalid command\n";
     }
 }
