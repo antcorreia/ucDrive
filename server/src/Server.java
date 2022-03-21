@@ -140,6 +140,7 @@ class Semaphore {
                 wait();
             }
             catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
         val--;
@@ -168,7 +169,7 @@ class Connection extends Thread {
         try {
             login();
 
-            String response = "server" + currentDir + "> ";
+            String response = "server /" + currentDir + " > ";
             String fromClient;
             while(true){
                 out.writeUTF(response);
@@ -206,7 +207,7 @@ class Connection extends Thread {
                 out.writeUTF("Insert Username: ");
                 contents = fa.getUserInfo(in.readUTF());
                 if(contents.size()==0)
-                    out.writeUTF("Username not found\n");
+                    out.writeUTF("Username not found\nserver /" + currentDir + " > ");
                 else {
                     Username = contents.get(0);
                     foundUsername = true;
@@ -223,16 +224,20 @@ class Connection extends Thread {
 
             currentDir = contents.get(2);
             String BASE_DIR = System.getProperty("user.dir");
-            File directory = new File(BASE_DIR + "/" +currentDir);
+            File directory = new File(BASE_DIR + "/home/" + currentDir);
             if (! directory.exists()){
-                directory.mkdir();
+                System.out.println("DEBUG: " + BASE_DIR + "/home/" + currentDir);
+                if (directory.mkdirs()) {
+                    System.out.println("DEBUG: Directory has been created successfully");
+                }
+                else {
+                    System.out.println("DEBUG: Directory cannot be created");
+                }
             }
-
 
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
     public boolean newPasswordRequest() {
@@ -249,49 +254,51 @@ class Connection extends Thread {
         return false;
     }
 
-    public String commandHandler(String command) throws IOException {
-
-
-        if(command.equals("rp")){
-            if(newPasswordRequest()) {
-                return "/reconnect";
-            }
-            else{
-                out.writeUTF("server > an error as ocorrued");
-            }
-        }
-        else if(command.equals("exit")){
-            return "/exit";
-        }
-
-        else if(command.substring(0,2).equals("cd")){
-            if(command.equals("cd")){
-                currentDir = Username + "/home";
-                return "server /" + currentDir +" > " ;
-            }
-            else{
-                String nextCommand = command.substring(3,command.length());
-                if(nextCommand.equals(" ..")){
-                    if(currentDir.equals(Username+"/home")){
-                        return "server /" + currentDir + ">";
-                    }
-                    currentDir = currentDir.substring(0,currentDir.lastIndexOf("/"));
-                    return "server /" + currentDir +" > " ;
+    public String commandHandler(String command) {
+        try {
+            if(command.equals("rp")){
+                if(newPasswordRequest()) {
+                    return "/reconnect";
                 }
-                if(nextCommand.substring(0,2).equals(" /")){
-                    String nextDir = nextCommand.substring(2,nextCommand.length());
-                    String BASE_DIR = System.getProperty("user.dir");
-                    File directory = new File(BASE_DIR + "/" +currentDir + "/" + nextDir);
-                    if (! directory.exists()) {
-                        currentDir = currentDir + "/" + nextDir;
-                        return "server /" + currentDir +" > " ;
-                    }
+                else{
+                    out.writeUTF("server > an error as ocorrued");
                 }
             }
+            else if(command.equals("exit")){
+                return "/exit";
+            }
 
+            else if(command.substring(0,2).equals("cd")){
+                if(command.equals("cd")){
+                    currentDir = Username + "/home";
+                    return "server /" + currentDir + " > ";
+                }
+                else{
+                    String nextCommand = command.substring(2,command.length());
+                    if(nextCommand.equals(" ..")){
+                        if(currentDir.equals(Username + "/home")){
+                            return "server /" + currentDir + " >";
+                        }
+                        currentDir = currentDir.substring(0,currentDir.lastIndexOf("/"));
+                        return "server /" + currentDir + " > " ;
+                    }
+                    if(nextCommand.charAt(0) == ' '){
+                        String nextDir = nextCommand.substring(1,nextCommand.length());
+                        String BASE_DIR = System.getProperty("user.dir");
+                        File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + nextDir);
+                        if (directory.exists()) {
+                            currentDir = currentDir + "/" + nextDir;
+                            return "server /" + currentDir + " > " ;
+                        }
+                        else
+                            return "Folder doesn't exist\nserver /"  + currentDir + " > ";
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
 
-
-        return "invalid command\n";
+        return "invalid command\nserver /" + currentDir + " > ";
     }
 }
