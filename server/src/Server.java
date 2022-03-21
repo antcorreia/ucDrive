@@ -22,10 +22,10 @@ public class Server{
             SocketAddress sockaddr = new InetSocketAddress(serverAddress, serverPort);
             listenSocket.bind(sockaddr);
 
-            System.out.println("Server started at port " + serverPort + " with socket " + listenSocket);
+            System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
                 Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
-                System.out.println("Client connected, clientsocket = "+clientSocket);
+                System.out.println("DEBUG: Client connected, clientsocket = "+clientSocket);
                 new Connection(clientSocket, FA);
             }
         } catch(IOException e) {
@@ -75,7 +75,7 @@ class FileAccess {
             }
             reader.close();
         } catch (FileNotFoundException e) {
-            System.out.println("File not found.");
+            System.out.println("DEBUG: File not found.");
             e.printStackTrace();
         }
         sem.doSignal();
@@ -95,7 +95,7 @@ class FileAccess {
                 String user = reader.nextLine();
                 String[] info = user.split(" / ");
                 if (info[0].equals(username)) {
-                    user = info[0] + " / " + newPassword;
+                    user = info[0] + " / " + newPassword + " / " + info[2];
                     changed = true;
                 }
                 lines.add(user);
@@ -162,7 +162,7 @@ class Connection extends Thread {
             out = new DataOutputStream(clientSocket.getOutputStream());
             fa = FA;
             this.start();
-        }catch(IOException e){System.out.println("Connection: " + e.getMessage());}
+        }catch(IOException e){System.out.println("DEBUG: Connection: " + e.getMessage());}
     }
 
     public void run(){
@@ -204,10 +204,10 @@ class Connection extends Thread {
             boolean passwordValid = false;
 
             while(!foundUsername) {
-                out.writeUTF("Insert Username: ");
+                out.writeUTF("server - insert username: ");
                 contents = fa.getUserInfo(in.readUTF());
                 if(contents.size()==0)
-                    out.writeUTF("Username not found\nserver /" + currentDir + " > ");
+                    out.writeUTF("server - Username not found\n");
                 else {
                     Username = contents.get(0);
                     foundUsername = true;
@@ -215,11 +215,11 @@ class Connection extends Thread {
 
             }
             while(!passwordValid) {
-                out.writeUTF("Insert Password: ");
+                out.writeUTF("server - insert password: ");
                 if (in.readUTF().equals(contents.get(1)))
                     passwordValid=true;
                 else
-                    out.writeUTF("Wrong Password\n");
+                    out.writeUTF("server - wrong password\n");
             }
 
             currentDir = contents.get(2);
@@ -242,7 +242,7 @@ class Connection extends Thread {
 
     public boolean newPasswordRequest() {
         try {
-            out.writeUTF("server > new password: ");
+            out.writeUTF("server - new password: ");
             String newpass = in.readUTF();
             if(fa.changePassword(Username, newpass))
                 return true;
@@ -261,7 +261,7 @@ class Connection extends Thread {
                     return "/reconnect";
                 }
                 else{
-                    out.writeUTF("server > an error as ocorrued");
+                    out.writeUTF("server - an error as ocorrued\nserver /" + currentDir + " > ");
                 }
             }
             else if(command.equals("exit")){
@@ -291,7 +291,7 @@ class Connection extends Thread {
                             return "server /" + currentDir + " > " ;
                         }
                         else
-                            return "Folder doesn't exist\nserver /"  + currentDir + " > ";
+                            return "server - folder doesn't exist\nserver /"  + currentDir + " > ";
                     }
                 }
             }
