@@ -1,6 +1,7 @@
 import java.net.*;
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Scanner;
 
 public class Server{
@@ -119,6 +120,41 @@ class FileAccess {
     }
 
 
+    public boolean saveCurrentDir(String username,String currentDir){
+        ArrayList<String> lines = new ArrayList<>();
+        boolean changed = false;
+        try {
+            sem.doWait();
+            String BASE_DIR = System.getProperty("user.dir");
+            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            Scanner reader = new Scanner(file);
+            while (reader.hasNextLine()) {
+                String user = reader.nextLine();
+                String[] info = user.split(" / ");
+                if (info[0].equals(username)) {
+                    user = info[0] + " / " + info[1] + " / " + currentDir;
+                    changed = true;
+                }
+                lines.add(user);
+            }
+            reader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients/clients.txt");
+            for (String s: lines) {
+                fileWriter.write(s + "\n");
+            }
+            fileWriter.close();
+
+        } catch (FileNotFoundException e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        sem.doSignal();
+        return changed;
+    }
+
 }
 
 class Semaphore {
@@ -185,6 +221,7 @@ class Connection extends Thread {
             clientSocket.close();
             in.close();
             out.close();
+            fa.saveCurrentDir(Username, currentDir);
 
             System.out.println("DEBUG: Client " + clientSocket +" left");
 
@@ -225,7 +262,7 @@ class Connection extends Thread {
             currentDir = contents.get(2);
             String BASE_DIR = System.getProperty("user.dir");
             File directory = new File(BASE_DIR + "/home/" + currentDir);
-            if (! directory.exists()){
+            if (!directory.exists()){
                 System.out.println("DEBUG: " + BASE_DIR + "/home/" + currentDir);
                 if (directory.mkdirs()) {
                     System.out.println("DEBUG: Directory has been created successfully");
@@ -234,6 +271,8 @@ class Connection extends Thread {
                     System.out.println("DEBUG: Directory cannot be created");
                 }
             }
+            else
+                System.out.println("DEBUG: Directory already exists");
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -256,7 +295,18 @@ class Connection extends Thread {
 
     public String commandHandler(String command) {
         try {
-            if(command.equals("rp")){
+            if(command.equals("help")){
+                String commands = "";
+                commands += "\n\trp - reset password\n";
+                commands += "\texit - leave server\n";
+                commands += "\tcd - home directory\n";
+                commands += "\tcd .. - previous directory\n";
+                commands += "\tcd dir - go to dir directory\n";
+                commands += "\tmkdir dir - create dir directory\n";
+                return commands + "\nserver /" + currentDir + " > ";
+            }
+
+            else if(command.equals("rp")){
                 if(newPasswordRequest()) {
                     return "/reconnect";
                 }
@@ -268,13 +318,13 @@ class Connection extends Thread {
                 return "/exit";
             }
 
-            else if(command.substring(0,2).equals("cd")){
+            else if(command.startsWith("cd")){
                 if(command.equals("cd")){
                     currentDir = Username + "/home";
                     return "server /" + currentDir + " > ";
                 }
                 else{
-                    String nextCommand = command.substring(2,command.length());
+                    String nextCommand = command.substring(2);
                     if(nextCommand.equals(" ..")){
                         if(currentDir.equals(Username + "/home")){
                             return "server /" + currentDir + " >";
@@ -283,7 +333,7 @@ class Connection extends Thread {
                         return "server /" + currentDir + " > " ;
                     }
                     if(nextCommand.charAt(0) == ' '){
-                        String nextDir = nextCommand.substring(1,nextCommand.length());
+                        String nextDir = nextCommand.substring(1);
                         String BASE_DIR = System.getProperty("user.dir");
                         File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + nextDir);
                         if (directory.exists()) {
@@ -295,6 +345,57 @@ class Connection extends Thread {
                     }
                 }
             }
+
+            else if (command.startsWith("mkdir ")) {
+                String newFolder = command.substring(6);
+                String BASE_DIR = System.getProperty("user.dir");
+                File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + newFolder);
+                if (!directory.exists()){
+                    System.out.println("DEBUG: " + BASE_DIR + "/home/" + currentDir);
+                    if (directory.mkdirs()) {
+                        System.out.println("DEBUG: Directory has been created successfully");
+                        currentDir = currentDir + "/" + newFolder;
+                        return "server /" + currentDir + " > " ;
+                    }
+                    else {
+                        System.out.println("DEBUG: Directory cannot be created");
+                    }
+                }
+                else
+                    System.out.println("DEBUG: Directory already exists");
+                    currentDir = currentDir + "/" + newFolder;
+                    return "server /" + currentDir + " > " ;
+            }
+
+            else if(command.equals("ls")){
+                String BASE_DIR = System.getProperty("user.dir");
+                File directory = new File(BASE_DIR + "/home/" + currentDir);
+
+                int biggestLen = 0;
+                for (File file : Objects.requireNonNull(directory.listFiles()))
+                    if (file.getName().length() > biggestLen)
+                        biggestLen = file.getName().length();
+
+                int count = 1;
+                StringBuilder output = new StringBuilder("");
+                for (File file : Objects.requireNonNull(directory.listFiles())){
+                    output.append(file.getName());
+                    if (count % 5 == 0)
+                        output.append("\n");
+                    else {
+                        output.append(" ".repeat(Math.max(0, biggestLen - file.getName().length())));
+                        output.append("\t");
+                    }
+                    count++;
+                }
+
+                if (--count % 5 != 0)
+                    output.append("\n");
+                output.append("server /").append(currentDir).append(" > ");
+
+                return output.toString();
+            }
+
         } catch (IOException e) {
             e.printStackTrace();
         }

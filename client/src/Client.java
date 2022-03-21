@@ -41,7 +41,7 @@ public class Client {
                 s.close();
                 in.close();
                 out.close();
-                System.out.println("leaving server");
+                System.out.println("Server - Exiting");
 
             } catch (UnknownHostException e) {
                 System.out.println("Sock:" + e.getMessage());
