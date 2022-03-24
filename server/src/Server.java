@@ -119,6 +119,40 @@ class FileAccess {
         return changed;
     }
 
+    public boolean saveCurrentDir(String username,String currentDir){
+        ArrayList<String> lines = new ArrayList<>();
+        boolean changed = false;
+        try {
+            sem.doWait();
+            String BASE_DIR = System.getProperty("user.dir");
+            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            Scanner reader = new Scanner(file);
+            while (reader.hasNextLine()) {
+                String user = reader.nextLine();
+                String[] info = user.split(" / ");
+                if (info[0].equals(username)) {
+                    user = info[0] + " / " + info[1] + " / " + currentDir;
+                    changed = true;
+                }
+                lines.add(user);
+            }
+            reader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients/clients.txt");
+            for (String s: lines) {
+                fileWriter.write(s + "\n");
+            }
+            fileWriter.close();
+
+        } catch (FileNotFoundException e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        sem.doSignal();
+        return changed;
+    }
 
     public boolean saveCurrentDir(String username,String currentDir){
         ArrayList<String> lines = new ArrayList<>();
@@ -314,6 +348,7 @@ class Connection extends Thread {
                     out.writeUTF("server - an error as ocorrued\nserver /" + currentDir + " > ");
                 }
             }
+
             else if(command.equals("exit")){
                 return "/exit";
             }
@@ -346,6 +381,7 @@ class Connection extends Thread {
                 }
             }
 
+<<<<<<< Updated upstream
             else if (command.startsWith("mkdir ")) {
                 String newFolder = command.substring(6);
                 String BASE_DIR = System.getProperty("user.dir");
@@ -396,6 +432,18 @@ class Connection extends Thread {
                 return output.toString();
             }
 
+=======
+            else if(command.equals("help")){
+                String commands = "";
+                commands += "\n\trp - reset password\n";
+                commands += "\texit - leave server\n";
+                commands += "\tcd - home directory\n";
+                commands += "\tcd .. - previous directory\n";
+                commands += "\tcd dir - go to dir directory\n";
+                commands += "\tmkdir dir - create dir directory\n";
+                return commands + "\nserver /" + currentDir + " > ";
+            }
+>>>>>>> Stashed changes
         } catch (IOException e) {
             e.printStackTrace();
         }
