@@ -1,0 +1,103 @@
+
+/// ROUTER SETUP ///
+enable
+
+config t
+interface ethernet0
+ip address 192.168.X.254 255.255.255.0
+no shutdown
+exit
+
+interface fastethernet0
+ip address 10.254.0.N 255.255.255.0
+no shutdown
+exit
+
+
+## EXERCICIO 1 ##
+X- Nº DADO NA AULA
+N- Nº DO GRUPO
+sh ru -> Verificar
+
+config t
+access-list 25 permit 192.168.X.0 0.0.0.255
+ip nat inside source list 25 interface FastEthernet0 overload
+
+interface Ethernet0
+ip address 192.168.X.254 255.255.255.0
+ip nat inside
+exit
+
+interface FastEthernet0
+ip address 10.254.0.N 255.255.255.0
+ip nat outside
+end
+
+// NO PC //
+IP: 192.168.X.100
+MASCARA: AUTO
+DEFAULT GATEWAY: END. IP OUTSIDE DO ROUTER: 10.254.0.N
+
+ping 10.254.0.N
+ping 192.168.X.254
+
+## EXERCICIO 2 ##
+
+config t
+access-list 25 deny 192.168.X.200 0.0.0.0
+ip nat inside source static 192.168.X.200 10.254.0.(N*16 +1)
+
+ip nat pool net-TESTE 10.254.0.(N*16 +2) 10.254.0.(N*16 +5) netmask 255.255.255.0
+ip nat inside source list 25 pool net-TESTE overload
+
+// NO PC //
+IP: 192.168.X.200
+MASCARA: AUTO
+DEFAULT GATEWAY: END. IP OUTSIDE DO ROUTER: 10.254.0.N
+VER CONSOLA DESSE SERVIDOR??
+
+ping 10.254.0.254
+
+IP: 192.168.X.MATH.RANDOM
+MASCARA: AUTO
+DEFAULT GATEWAY: END. IP OUTSIDE DO ROUTER: 10.254.0.N
+VER CONSOLA DESSE SERVIDOR??
+
+ping 10.254.0.254
+
+
+## EXERCICIO 3 ##
+Assumindo que o ex1 e 2 estao configurados:
+
+interface Ethernet0
+desc Rede interna
+ip address 192.168.X.254 255.255.255.0
+ip nat inside
+exit
+
+interface FastEthernet0
+desc Rede Externa
+ip address 10.254.0.N 255.255.255.0
+ip nat outside
+ip access-group 120 in
+exit
+
+// Config NAT/PAT
+
+ip nat pool net-TESTE 172.16.(X+N).253 172.16.(X+N).254 netmask 255.255.255.0
+ip nat inside source list 1 pool net-TESTE overload
+access-list 1 permit 192.168.X.0 0.0.0.255
+
+// NO PC //
+ping 10.254.0.254
+
+
+
+
+
+
+
+
+
+
+

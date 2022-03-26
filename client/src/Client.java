@@ -150,6 +150,19 @@ public class Client {
 
         }
 
+        private void receiveFile(String fileName) throws Exception{
+            int bytes = 0;
+            FileOutputStream fileOutputStream = new FileOutputStream(fileName);
+
+            long size = in.readLong();     // read file size
+            byte[] buffer = new byte[4*1024];
+            while (size > 0 && (bytes = in.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+                fileOutputStream.write(buffer,0,bytes);
+                size -= bytes;      // read upto file size
+            }
+            fileOutputStream.close();
+        }
+
         /**
          * server commands receveid to be executed by client
          * @param command command
@@ -168,7 +181,16 @@ public class Client {
             else if (command.equals("/exit")){
                 return true;
             }
-            // outros commandos q possam vir a aparecer
+
+            else if (command.startsWith("/file_download ")){
+                String[] info = command.split(" ");
+                try {
+                    receiveFile(info[1]);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
 
             return false;
         }

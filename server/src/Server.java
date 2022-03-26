@@ -119,7 +119,6 @@ class FileAccess {
         return changed;
     }
 
-
     public boolean saveCurrentDir(String username,String currentDir){
         ArrayList<String> lines = new ArrayList<>();
         boolean changed = false;
@@ -293,6 +292,22 @@ class Connection extends Thread {
         return false;
     }
 
+    public void sendFile(String path) throws Exception{
+        int bytes = 0;
+        File file = new File(path);
+        FileInputStream fileInputStream = new FileInputStream(file);
+
+        // send file size
+        out.writeLong(file.length());
+        // break file into chunks
+        byte[] buffer = new byte[4*1024];
+        while ((bytes=fileInputStream.read(buffer))!=-1){
+            out.write(buffer,0,bytes);
+            out.flush();
+        }
+        fileInputStream.close();
+    }
+
     public String commandHandler(String command) {
         try {
             if(command.equals("help")){
@@ -314,6 +329,7 @@ class Connection extends Thread {
                     out.writeUTF("server - an error as ocorrued\nserver /" + currentDir + " > ");
                 }
             }
+
             else if(command.equals("exit")){
                 return "/exit";
             }
@@ -396,7 +412,22 @@ class Connection extends Thread {
                 return output.toString();
             }
 
-        } catch (IOException e) {
+            else if(command.startsWith("save ")){
+                String[] info = command.split(" ");
+
+                // check if info[1] aka file exists
+                // check if info[2] aka path localy exists
+                    // probably send command to client and get client to check if he has that dir
+                // por agora mandar pela mesma socket mas temos que ter duas
+
+                out.writeUTF("/file_download "+info[1]);
+                String BASE_DIR = System.getProperty("user.dir");
+                String filepath = BASE_DIR + "/home/" + currentDir +"/"+ info[1];
+                sendFile(filepath);
+                return "poopy\n";
+            }
+
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
