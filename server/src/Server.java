@@ -377,10 +377,11 @@ class Connection extends Thread {
                         System.out.println("DEBUG: Directory cannot be created");
                     }
                 }
-                else
+                else {
                     System.out.println("DEBUG: Directory already exists");
                     currentDir = currentDir + "/" + newFolder;
-                    return "server /" + currentDir + " > " ;
+                    return "server /" + currentDir + " > ";
+                }
             }
 
             else if(command.equals("ls")){
@@ -414,23 +415,23 @@ class Connection extends Thread {
 
             else if(command.startsWith("save ")){
                 String[] info = command.split(" ");
-
-                // check if info[1] aka file exists
-                // check if info[2] aka path localy exists
-                    // probably send command to client and get client to check if he has that dir
-                // por agora mandar pela mesma socket mas temos que ter duas
-
-                out.writeUTF("/file_download "+info[1]);
                 String BASE_DIR = System.getProperty("user.dir");
+                File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + info[1]);
+                if (!directory.exists()){
+                    return "server: file does not exist" +
+                            "\nserver /" + currentDir + " > ";
+                }
+                out.writeUTF("/file_download "+info[2]+info[1]);
+
                 String filepath = BASE_DIR + "/home/" + currentDir +"/"+ info[1];
                 sendFile(filepath);
-                return "poopy\n";
+                return "server: download complete\nserver /" + currentDir + " > ";
             }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        return "invalid command\nserver /" + currentDir + " > ";
+        return "server: invalid command\nserver /" + currentDir + " > ";
     }
 }

@@ -20,7 +20,7 @@ public class Client {
         serverSocket = Integer.parseInt(connectionInfo.get(1));
 
         while(reconnect) {
-            // reconnection starts at false, if eventually is need turn true in specificr region
+            // reconnection starts at false, if eventually is need turn true in specified region
             reconnect = false;
             // criar socket
             try (Socket s = new Socket(serverAddress, serverSocket)) {
@@ -41,7 +41,7 @@ public class Client {
                 s.close();
                 in.close();
                 out.close();
-                System.out.println("Server - Exiting");
+                System.out.println("server: exiting");
 
             } catch (UnknownHostException e) {
                 System.out.println("Sock:" + e.getMessage());
@@ -185,13 +185,19 @@ public class Client {
             else if (command.startsWith("/file_download ")){
                 String[] info = command.split(" ");
                 try {
-                    receiveFile(info[1]);
+                    String BASE_DIR = System.getProperty("user.dir");
+                    String dir =  info[1].substring(0,info[1].lastIndexOf("/")); // get dir until file
+                    File directory = new File(BASE_DIR + dir);
+                    if (directory.mkdirs()) {
+                        receiveFile(BASE_DIR+info[1]);
+                    }
+                    else {
+                        System.out.println("local: an error ocurred while creating folder");
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
-
-
             return false;
         }
     }
