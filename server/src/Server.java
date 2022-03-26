@@ -445,6 +445,23 @@ class Connection extends Thread {
                 return "server: download complete\nserver /" + currentDir + " > ";
             }
 
+            else if(command.startsWith("upload ")) {
+                String[] info = command.split(" ");
+                String BASE_DIR = System.getProperty("user.dir");
+                String dir = info[1].substring(0, info[1].lastIndexOf("/")); // get dir until file
+                File directory = new File(BASE_DIR +"/home/"+ Username + "/" + dir);
+                if (!directory.exists()) {
+                    if (directory.mkdirs()) {
+                        receiveFile(BASE_DIR + BASE_DIR +"/home/"+ Username + "/" + info[1]);
+                    } else {
+                        System.out.println("DEBUG: an error ocurred while creating folder");
+                    }
+                } else {
+                    receiveFile(BASE_DIR +"/home/"+ Username + "/" + info[1]);
+                }
+                return "";
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }

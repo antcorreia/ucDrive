@@ -140,6 +140,7 @@ public class Client {
                     commands += "\tcd .. - previous directory\n";
                     commands += "\tcd dir - go to dir directory\n";
                     commands += "\tmkdir dir - create dir directory\n";
+                    commands += "\tupload filename /home/dir/ - create dir directory\n";
                     return commands + "\nlocal /" + currentDir + " > ";
                 }
 
@@ -226,19 +227,19 @@ public class Client {
                     return output.toString();
                 }
 
-                else if(command.startsWith("save ")){
+                else if(command.startsWith("upload ")){
                     String[] info = command.split(" ");
                     String BASE_DIR = System.getProperty("user.dir");
-                    File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + info[1]);
+                    File directory = new File(BASE_DIR + "/" + currentDir + "/" + info[1]);
                     if (!directory.exists()){
-                        return "server: file does not exist" +
-                                "\nserver /" + currentDir + " > ";
+                        return "local: file does not exist" +
+                                "\nlocal /" + currentDir + " > ";
                     }
-                    out.writeUTF("/file_download "+info[2]+info[1]);
+                    out.writeUTF("upload "+info[2]+info[1]);
 
-                    String filepath = BASE_DIR + "/home/" + currentDir +"/"+ info[1];
+                    String filepath = BASE_DIR + "/" + currentDir +"/"+ info[1];
                     sendFile(filepath);
-                    return "server: download complete\nserver /" + currentDir + " > ";
+                    return "local: upload complete\nlocal /" + currentDir + " > ";
                 }
 
             } catch (Exception e) {
@@ -279,12 +280,13 @@ public class Client {
             while (true) {
                 try {
                     String fromServer = in.readUTF();
-                    if(fromServer.charAt(0)=='/'){
-                        if(fromServerHandler(fromServer))
-                            break;
-                    }
-                    else{
-                        System.out.print(fromServer);
+                    if(!fromServer.equals("")) {
+                        if (fromServer.charAt(0) == '/') {
+                            if (fromServerHandler(fromServer))
+                                break;
+                        } else {
+                            System.out.print(fromServer);
+                        }
                     }
                 } catch (EOFException e) {
                 System.out.println("EOF:" + e.getMessage());}
