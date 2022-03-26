@@ -308,10 +308,23 @@ class Connection extends Thread {
         fileInputStream.close();
     }
 
+    private void receiveFile(String fileName) throws Exception{
+        int bytes = 0;
+        FileOutputStream fileOutputStream = new FileOutputStream(fileName);
+
+        long size = in.readLong();     // read file size
+        byte[] buffer = new byte[4*1024];
+        while (size > 0 && (bytes = in.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
+            fileOutputStream.write(buffer,0,bytes);
+            size -= bytes;      // read upto file size
+        }
+        fileOutputStream.close();
+    }
+
     public String commandHandler(String command) {
         try {
             if(command.equals("help")){
-                String commands = "";
+                String commands = "";;
                 commands += "\n\trp - reset password\n";
                 commands += "\texit - leave server\n";
                 commands += "\tcd - home directory\n";
@@ -319,6 +332,10 @@ class Connection extends Thread {
                 commands += "\tcd dir - go to dir directory\n";
                 commands += "\tmkdir dir - create dir directory\n";
                 return commands + "\nserver /" + currentDir + " > ";
+            }
+
+            else if(command.equals("server")){
+                return "server /" + currentDir + " > ";
             }
 
             else if(command.equals("rp")){
