@@ -9,19 +9,31 @@ public class Server{
     public static void main(String[] args){
         Scanner sc = new Scanner(System.in);
 
-        String serverAddress;
-        int serverPort;
-
         ArrayList<String> connectionInfo = getConnectionInfo(sc);
-        serverAddress = connectionInfo.get(0);
-        serverPort = Integer.parseInt(connectionInfo.get(1));
-
+        String serverAddress = connectionInfo.get(0);
+        int serverPort = Integer.parseInt(connectionInfo.get(1));
+        int serverHierarchy = Integer.parseInt(connectionInfo.get(2));
+        int hbPort = Integer.parseInt(connectionInfo.get(3));
         FileAccess FA = new FileAccess();
 
+        if(serverHierarchy == 2){
+            HeartBeat HB = new HeartBeat(hbPort,false,connectionInfo.get(4));
+            HB.start();
+            try {
+                HB.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
         try {
+
             ServerSocket listenSocket = new ServerSocket();
             SocketAddress sockaddr = new InetSocketAddress(serverAddress, serverPort);
             listenSocket.bind(sockaddr);
+
+            HeartBeat HB = new HeartBeat(hbPort,true);
+            HB.start();
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
@@ -30,6 +42,7 @@ public class Server{
                 new Connection(clientSocket, FA);
             }
         } catch(IOException e) {
+            e.printStackTrace();
             System.out.println("Listen: " + e.getMessage());
         }
     }
@@ -37,10 +50,18 @@ public class Server{
     public static ArrayList<String> getConnectionInfo(Scanner sc) {
         ArrayList<String> info = new ArrayList<>();
 
-        System.out.print("Insert the Primary Server IP Address: ");
+        System.out.print("Insert the Server IP Address: ");
         info.add(sc.nextLine());
-        System.out.print("Insert the Primary Server Port: ");
+        System.out.print("Insert the Server Port: ");
         info.add(sc.nextLine());
+        System.out.print("Press 1 if server is primary, 2 if is secundary: ");
+        info.add(sc.nextLine());
+        System.out.print("HeartBeat Port: ");
+        info.add(sc.nextLine());
+        if(info.get(2).equals("2")){
+            System.out.print("Main IP: ");
+            info.add(sc.nextLine());
+        }
 
 
         /*System.out.print("Insert the Secondary Server IP Address: ");
@@ -50,6 +71,162 @@ public class Server{
 
         return info;
     }
+}
+
+class HeartBeat extends Thread{
+
+    private DatagramPacket request, reply;
+    private DatagramSocket socket;
+    private static byte[] buffer = new byte[1024];
+    private boolean primary;
+    public static int hb_cont;
+    public static int hb_default;
+
+    public HeartBeat(int port,boolean hierarchy){
+
+        try {
+            socket = new DatagramSocket(port);
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        primary = hierarchy;
+        request = new DatagramPacket(buffer, buffer.length);
+    }
+    public HeartBeat(int port,boolean hierarchy, String ipHost){
+
+        try {
+            socket = new DatagramSocket();
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+
+        String a = "1";
+        buffer = a.getBytes();
+        InetAddress aHost = null;
+        try {
+            aHost = InetAddress.getByName(ipHost);
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
+        reply = new DatagramPacket(buffer, buffer.length, aHost, port);
+        request = new DatagramPacket(buffer, buffer.length);
+        primary = hierarchy;
+        hb_cont = 5; // read from config file
+        hb_default = hb_cont;
+
+    }
+
+    public void ackping(){
+
+        while (true) {
+            try {
+                socket.receive(request);
+                reply = new DatagramPacket(request.getData(), request.getLength(), request.getAddress(), request.getPort());
+                socket.send(reply);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }
+    }
+
+    public void run(){
+        if(primary) {
+            ackping();
+        }
+        else{
+            PingRecv pingrecv = new PingRecv(request,socket);
+            pingrecv.start();
+            PingSend pingsend = new PingSend(reply,socket);
+            pingsend.start();
+
+            try {
+                pingrecv.join();
+                pingsend.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+    }
+
+    public static class PingRecv extends Thread{
+
+        private DatagramPacket request;
+        private DatagramSocket socket;
+        private int delay;
+
+        public PingRecv( DatagramPacket r, DatagramSocket s){
+            request = r;
+            socket = s;
+            delay = 500; // READ FROM CONFIG
+        }
+
+        public void run(){
+
+            while(true){
+                try {
+                    socket.setSoTimeout(delay*2);
+                    hb_cont = hb_default;
+                    socket.receive(request);
+                    if(hb_cont<0){
+                        break;
+                    }
+                }
+                catch (SocketTimeoutException e){
+                    break;
+                }
+                catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+        }
+
+    }
+
+    public static class PingSend extends Thread{
+
+        private DatagramPacket reply;
+        private DatagramSocket socket;
+        private int delay;
+
+        public PingSend(DatagramPacket r,DatagramSocket s){
+            delay = 500; // read from config file
+            socket = s;
+            reply = r;
+        }
+
+        public void run(){
+
+            while(true){
+                try {
+                    socket.send(reply);
+                    hb_cont--;
+                    Thread.sleep(delay);
+                    if(hb_cont<0){
+                        try {
+                            DatagramSocket s = new DatagramSocket();
+                        } catch (SocketException e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                    }
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+        }
+
+    }
+
 }
 
 class FileAccess {
@@ -323,6 +500,7 @@ class Connection extends Thread {
 
     public String commandHandler(String command) {
         try {
+
             if(command.equals("help")){
                 String commands = "";;
                 commands += "\n\trp - reset password\n";
