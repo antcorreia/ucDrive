@@ -17,7 +17,7 @@ public class Server{
         FileAccess FA = new FileAccess();
 
         if(serverHierarchy == 2){
-            HeartBeat HB = new HeartBeat(hbPort,false,connectionInfo.get(4));
+            HeartBeat HB = new HeartBeat(hbPort,false,"1");
             HB.start();
             try {
                 HB.join();
@@ -63,12 +63,6 @@ public class Server{
             info.add(sc.nextLine());
         }
 
-
-        /*System.out.print("Insert the Secondary Server IP Address: ");
-        info.add(sc.nextLine());
-        System.out.print("Insert the Secondary Server Port: ");
-        info.add(sc.nextLine());*/
-
         return info;
     }
 }
@@ -76,7 +70,7 @@ public class Server{
 class HeartBeat extends Thread{
 
     private DatagramPacket request, reply;
-    private DatagramSocket socket;
+    private MulticastSocket socket;
     private static byte[] buffer = new byte[1024];
     private boolean primary;
     public static int hb_cont;
@@ -85,30 +79,26 @@ class HeartBeat extends Thread{
     public HeartBeat(int port,boolean hierarchy){
 
         try {
-            socket = new DatagramSocket(port);
-        } catch (SocketException e) {
+            socket = new MulticastSocket(port);
+            InetAddress group = InetAddress.getByName("224.3.2.1");
+            socket.joinGroup(group);
+        } catch (IOException e) {
             e.printStackTrace();
         }
         primary = hierarchy;
         request = new DatagramPacket(buffer, buffer.length);
     }
-    public HeartBeat(int port,boolean hierarchy, String ipHost){
+    public HeartBeat(int port,boolean hierarchy, String message){
 
         try {
-            socket = new DatagramSocket();
-        } catch (SocketException e) {
+            socket = new MulticastSocket();
+            InetAddress group = InetAddress.getByName("224.3.2.1");
+            reply = new DatagramPacket(buffer, buffer.length, group, port);
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
-        String a = "1";
-        buffer = a.getBytes();
-        InetAddress aHost = null;
-        try {
-            aHost = InetAddress.getByName(ipHost);
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
-        reply = new DatagramPacket(buffer, buffer.length, aHost, port);
+        buffer = message.getBytes();
         request = new DatagramPacket(buffer, buffer.length);
         primary = hierarchy;
         hb_cont = 5; // read from config file
@@ -121,6 +111,7 @@ class HeartBeat extends Thread{
         while (true) {
             try {
                 socket.receive(request);
+                System.out.println("recebi");
                 reply = new DatagramPacket(request.getData(), request.getLength(), request.getAddress(), request.getPort());
                 socket.send(reply);
             } catch (IOException e) {
@@ -154,10 +145,10 @@ class HeartBeat extends Thread{
     public static class PingRecv extends Thread{
 
         private DatagramPacket request;
-        private DatagramSocket socket;
+        private MulticastSocket socket;
         private int delay;
 
-        public PingRecv( DatagramPacket r, DatagramSocket s){
+        public PingRecv( DatagramPacket r, MulticastSocket s){
             request = r;
             socket = s;
             delay = 500; // READ FROM CONFIG
@@ -170,6 +161,7 @@ class HeartBeat extends Thread{
                     socket.setSoTimeout(delay*2);
                     hb_cont = hb_default;
                     socket.receive(request);
+                    System.out.println("recebi");
                     if(hb_cont<0){
                         break;
                     }
@@ -190,10 +182,10 @@ class HeartBeat extends Thread{
     public static class PingSend extends Thread{
 
         private DatagramPacket reply;
-        private DatagramSocket socket;
+        private MulticastSocket socket;
         private int delay;
 
-        public PingSend(DatagramPacket r,DatagramSocket s){
+        public PingSend(DatagramPacket r,MulticastSocket s){
             delay = 500; // read from config file
             socket = s;
             reply = r;
@@ -204,14 +196,10 @@ class HeartBeat extends Thread{
             while(true){
                 try {
                     socket.send(reply);
+                    System.out.println("mandei");
                     hb_cont--;
                     Thread.sleep(delay);
                     if(hb_cont<0){
-                        try {
-                            DatagramSocket s = new DatagramSocket();
-                        } catch (SocketException e) {
-                            e.printStackTrace();
-                        }
                         break;
                     }
 
@@ -397,7 +385,9 @@ class Connection extends Thread {
             clientSocket.close();
             in.close();
             out.close();
-            fa.saveCurrentDir(Username, currentDir);
+            if(!fa.saveCurrentDir(Username, currentDir)){
+                System.out.println("DEBUG: Error saving directory");
+            }
 
             System.out.println("DEBUG: Client " + clientSocket +" left");
 
@@ -647,3 +637,4 @@ class Connection extends Thread {
         return "server: invalid command\nserver /" + currentDir + " > ";
     }
 }
+
