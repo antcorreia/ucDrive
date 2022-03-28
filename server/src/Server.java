@@ -684,7 +684,7 @@ class ConnectionUDP extends Thread {
         if (serverHierarchy == 1) {
             //send
             //ver path da queue
-            String path = System.getProperty("user.dir") + "/home/lopes/23.txt";
+            String path = System.getProperty("user.dir") + "/home/lopes/img.png";
             sendFileUDP(path);
         }
         else {
@@ -758,7 +758,7 @@ class ConnectionUDP extends Thread {
                     DatagramPacket checkPacket = new DatagramPacket(check, check.length);
 
                     try {
-                        ssocket.setSoTimeout(50); // Waiting for the server to send the ack
+                        rsocket.setSoTimeout(500); // Waiting for the server to send the ack
                         rsocket.receive(checkPacket);
                         ackSequence = ((check[0] & 0xff) << 8) + (check[1] & 0xff); // Figuring the sequence number
                         checkReceived = true; // We received the ack
@@ -805,7 +805,7 @@ class ConnectionUDP extends Thread {
             byte[] data = filePathPacket.getData();
             String filePath = new String(data, 0, filePathPacket.getLength());
 
-            String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa.txt"; // get dir until file
+            String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa.png"; // get dir until file
             File f = new File (a);
             FileOutputStream fos = new FileOutputStream(f);
 
@@ -823,8 +823,8 @@ class ConnectionUDP extends Thread {
                 message = receivedPacket.getData(); // Data to be written to the file
 
                 // Get port and address for sending acknowledgment
-                InetAddress address = receivedPacket.getAddress();
-                int port = receivedPacket.getPort();
+                //InetAddress address = receivedPacket.getAddress();
+                //int port = receivedPacket.getPort();
 
                 // Retrieve sequence number
                 sequenceNumber = ((message[0] & 0xff) << 8) + (message[1] & 0xff);
