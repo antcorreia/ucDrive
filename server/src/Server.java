@@ -14,13 +14,13 @@ public class Server{
         int serverPort = Integer.parseInt(connectionInfo.get(1));
         int serverHierarchy = Integer.parseInt(connectionInfo.get(2));
         int hbPort = Integer.parseInt(connectionInfo.get(3));
-        /*int backupPort = Integer.parseInt(connectionInfo.get(4));
-        String otherServerAddress = connectionInfo.get(5);*/
+        int backupPort = Integer.parseInt(connectionInfo.get(4));
+        String otherServerAddress = connectionInfo.get(5);
         FileAccess FA = new FileAccess();
 
         if(serverHierarchy == 2){
             HeartBeat HB = new HeartBeat(hbPort,false,"1");
-            //ConnectionUDP backup = new ConnectionUDP(serverHierarchy, otherServerAddress, );
+            ConnectionUDP backup = new ConnectionUDP(serverHierarchy, otherServerAddress,backupPort);
             HB.start();
             try {
                 HB.join();
@@ -38,6 +38,7 @@ public class Server{
 
             HeartBeat HB = new HeartBeat(hbPort,true);
             HB.start();
+            ConnectionUDP backup = new ConnectionUDP(1, otherServerAddress,backupPort);
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
@@ -62,16 +63,16 @@ public class Server{
         info.add(sc.nextLine());
         System.out.print("HeartBeat Port: ");
         info.add(sc.nextLine());
-        /*System.out.print("Backup Port: ");
-        info.add(sc.nextLine());*/
+        System.out.print("Backup Port: ");
+        info.add(sc.nextLine());
         if(info.get(2).equals("2")){
             System.out.print("Main IP: ");
             info.add(sc.nextLine());
         }
-        /*else if(info.get(2).equals("1")){
+        else if(info.get(2).equals("1")){
             System.out.print("Secondary IP: ");
             info.add(sc.nextLine());
-        }*/
+        }
 
         return info;
     }
@@ -80,7 +81,7 @@ public class Server{
 class HeartBeat extends Thread{
 
     private DatagramPacket request, reply;
-    private MulticastSocket socket;
+    private MulticastSocket ssocket,rsocket;
     private static byte[] buffer = new byte[1024];
     private boolean primary;
     public static int hb_cont;
@@ -89,30 +90,44 @@ class HeartBeat extends Thread{
     public HeartBeat(int port,boolean hierarchy){
 
         try {
-            socket = new MulticastSocket(port);
-            InetAddress group = InetAddress.getByName("224.3.2.1");
-            socket.joinGroup(group);
+            rsocket = new MulticastSocket(port);
+            InetAddress rgroup = InetAddress.getByName("224.3.2.1");
+            rsocket.joinGroup(rgroup);
+
+            ssocket = new MulticastSocket();
+            InetAddress sgroup = InetAddress.getByName("224.3.2.2");
+
+            primary = hierarchy;
+            String message = "1";
+            buffer = message.getBytes();
+            reply = new DatagramPacket(buffer, buffer.length, sgroup, port);
+            request = new DatagramPacket(buffer, buffer.length);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        primary = hierarchy;
-        request = new DatagramPacket(buffer, buffer.length);
+
     }
     public HeartBeat(int port,boolean hierarchy, String message){
 
         try {
-            socket = new MulticastSocket();
-            InetAddress group = InetAddress.getByName("224.3.2.1");
-            reply = new DatagramPacket(buffer, buffer.length, group, port);
+            rsocket = new MulticastSocket(port);
+            InetAddress rgroup = InetAddress.getByName("224.3.2.2");
+            rsocket.joinGroup(rgroup);
+
+            ssocket = new MulticastSocket();
+            InetAddress sgroup = InetAddress.getByName("224.3.2.1");
+
+            buffer = message.getBytes();
+            reply = new DatagramPacket(buffer, buffer.length, sgroup, port);
+            request = new DatagramPacket(buffer, buffer.length);
+            primary = hierarchy;
+            hb_cont = 5; // read from config file
+            hb_default = hb_cont;
+
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        buffer = message.getBytes();
-        request = new DatagramPacket(buffer, buffer.length);
-        primary = hierarchy;
-        hb_cont = 5; // read from config file
-        hb_default = hb_cont;
 
     }
 
@@ -120,10 +135,9 @@ class HeartBeat extends Thread{
 
         while (true) {
             try {
-                socket.receive(request);
-                System.out.println("recebi");
-                reply = new DatagramPacket(request.getData(), request.getLength(), request.getAddress(), request.getPort());
-                socket.send(reply);
+                rsocket.receive(request);
+                System.out.println("recebi do failover");
+                ssocket.send(reply);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -136,9 +150,9 @@ class HeartBeat extends Thread{
             ackping();
         }
         else{
-            PingRecv pingrecv = new PingRecv(request,socket);
+            PingRecv pingrecv = new PingRecv(request,rsocket);
             pingrecv.start();
-            PingSend pingsend = new PingSend(reply,socket);
+            PingSend pingsend = new PingSend(reply,ssocket);
             pingsend.start();
 
             try {
@@ -161,14 +175,14 @@ class HeartBeat extends Thread{
         public PingRecv( DatagramPacket r, MulticastSocket s){
             request = r;
             socket = s;
-            delay = 500; // READ FROM CONFIG
+            delay = 2000; // READ FROM CONFIG
         }
 
         public void run(){
 
             while(true){
                 try {
-                    socket.setSoTimeout(delay*2);
+                    socket.setSoTimeout(delay*5);
                     hb_cont = hb_default;
                     socket.receive(request);
                     System.out.println("recebi");
@@ -196,7 +210,7 @@ class HeartBeat extends Thread{
         private int delay;
 
         public PingSend(DatagramPacket r,MulticastSocket s){
-            delay = 500; // read from config file
+            delay = 2000; // read from config file
             socket = s;
             reply = r;
         }
@@ -695,12 +709,16 @@ class ConnectionUDP extends Thread {
         try {
             Thread.sleep(15000);
             System.out.println("Backup Started");
-            DatagramSocket socket = new DatagramSocket();
-            InetAddress iAddress = InetAddress.getByName(address);
+            MulticastSocket ssocket = new MulticastSocket();
+            InetAddress sgroup = InetAddress.getByName("224.3.2.3");
+
+            MulticastSocket rsocket = new MulticastSocket(port);
+            InetAddress rgroup = InetAddress.getByName("224.3.2.4");
+            rsocket.joinGroup(rgroup);
 
             byte[] filePathBytes = filePath.getBytes();
-            DatagramPacket filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length, iAddress, port);
-            socket.send(filePathPacket);
+            DatagramPacket filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length, sgroup, port);
+            ssocket.send(filePathPacket);
 
             File f = new File(filePath);
             byte[] fileBytes = readFileToByteArray(f);
@@ -729,8 +747,8 @@ class ConnectionUDP extends Thread {
                     System.arraycopy(fileBytes, i, data, 3, fileBytes.length - i);
                 }
 
-                DatagramPacket sendPacket = new DatagramPacket(data, data.length, iAddress, port); // The data to be sent
-                socket.send(sendPacket);
+                DatagramPacket sendPacket = new DatagramPacket(data, data.length, sgroup, port); // The data to be sent
+                ssocket.send(sendPacket);
                 System.out.println("Sent: Sequence number = " + sequenceNumber);
 
                 // Know if the part of the file was received correctly
@@ -740,8 +758,8 @@ class ConnectionUDP extends Thread {
                     DatagramPacket checkPacket = new DatagramPacket(check, check.length);
 
                     try {
-                        socket.setSoTimeout(50); // Waiting for the server to send the ack
-                        socket.receive(checkPacket);
+                        ssocket.setSoTimeout(50); // Waiting for the server to send the ack
+                        rsocket.receive(checkPacket);
                         ackSequence = ((check[0] & 0xff) << 8) + (check[1] & 0xff); // Figuring the sequence number
                         checkReceived = true; // We received the ack
                     } catch (SocketTimeoutException e) {
@@ -755,7 +773,7 @@ class ConnectionUDP extends Thread {
                         break;
                     } // Package was not received, so we resend it
                     else {
-                        socket.send(sendPacket);
+                        ssocket.send(sendPacket);
                         System.out.println("Resending: Sequence Number = " + sequenceNumber);
                     }
                 }
@@ -774,12 +792,16 @@ class ConnectionUDP extends Thread {
         try {
             Thread.sleep(10000);
             System.out.println("Backup Started");
-            DatagramSocket socket = new DatagramSocket(port);
-            //InetAddress iAddress = InetAddress.getByName(address);
+            MulticastSocket ssocket = new MulticastSocket();
+            InetAddress sgroup = InetAddress.getByName("224.3.2.4");
+
+            MulticastSocket rsocket = new MulticastSocket(port);
+            InetAddress rgroup = InetAddress.getByName("224.3.2.3");
+            rsocket.joinGroup(rgroup);
 
             byte[] filePathBytes = new byte[1024];
             DatagramPacket filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length);
-            socket.receive(filePathPacket);
+            rsocket.receive(filePathPacket);
             byte[] data = filePathPacket.getData();
             String filePath = new String(data, 0, filePathPacket.getLength());
 
@@ -797,7 +819,7 @@ class ConnectionUDP extends Thread {
 
                 // Receive packet and retrieve the data
                 DatagramPacket receivedPacket = new DatagramPacket(message, message.length);
-                socket.receive(receivedPacket);
+                rsocket.receive(receivedPacket);
                 message = receivedPacket.getData(); // Data to be written to the file
 
                 // Get port and address for sending acknowledgment
@@ -834,8 +856,8 @@ class ConnectionUDP extends Thread {
                 checkPacket[0] = (byte) (foundLast >> 8);
                 checkPacket[1] = (byte) (foundLast);
                 // the datagram packet to be sent
-                DatagramPacket acknowledgement = new DatagramPacket(checkPacket, checkPacket.length, address, port);
-                socket.send(acknowledgement);
+                DatagramPacket acknowledgement = new DatagramPacket(checkPacket, checkPacket.length, sgroup, port);
+                ssocket.send(acknowledgement);
                 System.out.println("Sent ack: Sequence Number = " + foundLast);
 
                 // Check for last datagram
