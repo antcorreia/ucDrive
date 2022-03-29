@@ -737,10 +737,43 @@ class ConnectionUDP extends Thread {
             InetAddress rgroup = InetAddress.getByName("224.3.2.4");
             rsocket.joinGroup(rgroup);
 
-            byte[] filePathBytes = filePath.getBytes();
-            DatagramPacket filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length, sgroup, port);
-            ssocket.send(filePathPacket);
 
+            // Send Path
+            boolean checkPath;
+            byte[] filePathBytes = filePath.getBytes();
+            byte[] fileP = new byte[filePathBytes.length + 1];
+            fileP[0] = (byte) (1);
+            System.arraycopy(filePathBytes, 0, fileP, 1, filePathBytes.length);
+            DatagramPacket filePathPacket = new DatagramPacket(fileP, fileP.length, sgroup, port);
+            ssocket.send(filePathPacket);
+            System.out.printf("Sent: Path %s\n", new String(fileP, 1, fileP.length));
+            // Know if the path was received correctly
+            while (true) {
+                byte[] check = new byte[1]; // Create another packet for datagram ackknowledgement
+                DatagramPacket checkPacket = new DatagramPacket(check, check.length);
+
+                try {
+                    rsocket.setSoTimeout(500); // Waiting for the server to send the ack
+                    rsocket.receive(checkPacket);
+                    checkPath = true; // We received the ack
+                } catch (SocketTimeoutException e) {
+                    System.out.println("Socket timed out waiting for ack");
+                    checkPath = false; // We did not receive an ack
+                }
+
+                // If the package was received correctly next packet can be sent
+                if ((check[0] == fileP[0]) && (checkPath)) {
+                    System.out.println("Ack received: Sequence Number = " + check[0]);
+                    break;
+                } // Package was not received, so we resend it
+                else {
+                    ssocket.send(filePathPacket);
+                    System.out.println("Resending: Sequence Number = " + check[0]);
+                }
+            }
+
+
+            // Send File
             File f = new File(filePath);
             byte[] fileBytes = readFileToByteArray(f);
 
@@ -821,6 +854,8 @@ class ConnectionUDP extends Thread {
             InetAddress rgroup = InetAddress.getByName("224.3.2.3");
             rsocket.joinGroup(rgroup);
 
+
+            // Receive Path
             byte[] filePathBytes = new byte[1024];
             DatagramPacket filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length);
 
@@ -836,15 +871,23 @@ class ConnectionUDP extends Thread {
                         return;
                     }
                 }
-
             }
 
-
             byte[] data = filePathPacket.getData();
-            String filePath = new String(data, 0, filePathPacket.getLength());
 
+            // Send confirmation
+            byte[] checkPath = new byte[1];
+            checkPath[0] = data[0];
+            // the datagram packet to be sent
+            DatagramPacket ackPathPacket = new DatagramPacket(checkPath, checkPath.length, sgroup, port);
+            ssocket.send(ackPathPacket);
+            System.out.println("Sent ack: Sequence Number = " + checkPath[0]);
+
+
+            // Receive File
+            String filePath = new String(data, 1, filePathPacket.getLength());
             String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa.png"; // get dir until file
-            File f = new File (a);
+            File f = new File(a);
             FileOutputStream fos = new FileOutputStream(f);
 
             int sequenceNumber = 0; // Order of sequences
@@ -904,6 +947,7 @@ class ConnectionUDP extends Thread {
                     // Re send the acknowledgement
                     //sendAck(foundLast, socket, address, port);
                 }
+                // Send confirmation
                 byte[] checkPacket = new byte[2];
                 checkPacket[0] = (byte) (foundLast >> 8);
                 checkPacket[1] = (byte) (foundLast);
