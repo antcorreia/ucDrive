@@ -48,6 +48,7 @@ public class Client {
                 System.out.println("Sock:" + e.getMessage());
             } catch (EOFException e) {
                 System.out.println("EOF:" + e.getMessage());
+                break;
             } catch (IOException e) {
                 System.out.println("IO:" + e.getMessage());
             } catch (InterruptedException e) {

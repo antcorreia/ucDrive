@@ -3,6 +3,8 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Scanner;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class Server{
 
@@ -24,7 +26,7 @@ public class Server{
             HB.start();
             try {
                 HB.join();
-                //backup.join();
+                backup.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -36,15 +38,16 @@ public class Server{
             SocketAddress sockaddr = new InetSocketAddress(serverAddress, serverPort);
             listenSocket.bind(sockaddr);
 
+            BlockingQueue<String> filequeue = new LinkedBlockingQueue<>();
             HeartBeat HB = new HeartBeat(hbPort,true);
             HB.start();
-            ConnectionUDP backup = new ConnectionUDP(1, otherServerAddress,backupPort);
+            ConnectionUDP backup = new ConnectionUDP(1, otherServerAddress,backupPort,filequeue);
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
                 Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
                 System.out.println("DEBUG: Client connected, clientsocket = "+clientSocket);
-                new Connection(clientSocket, FA);
+                new Connection(clientSocket, FA, filequeue);
             }
         } catch(IOException e) {
             e.printStackTrace();
@@ -136,13 +139,16 @@ class HeartBeat extends Thread{
         while (true) {
             try {
                 rsocket.receive(request);
-                System.out.println("recebi do failover");
+                //System.out.println("recebi do failover");
                 ssocket.send(reply);
             } catch (IOException e) {
                 e.printStackTrace();
+                rsocket.close();
+                ssocket.close();
             }
 
         }
+
     }
 
     public void run(){
@@ -185,7 +191,7 @@ class HeartBeat extends Thread{
                     socket.setSoTimeout(delay*5);
                     hb_cont = hb_default;
                     socket.receive(request);
-                    System.out.println("recebi");
+                    //System.out.println("recebi");
                     if(hb_cont<0){
                         break;
                     }
@@ -198,6 +204,7 @@ class HeartBeat extends Thread{
                 }
 
             }
+            socket.close();
 
         }
 
@@ -220,7 +227,7 @@ class HeartBeat extends Thread{
             while(true){
                 try {
                     socket.send(reply);
-                    System.out.println("mandei");
+                    //System.out.println("mandei");
                     hb_cont--;
                     Thread.sleep(delay);
                     if(hb_cont<0){
@@ -234,6 +241,7 @@ class HeartBeat extends Thread{
                 }
 
             }
+            socket.close();
 
         }
 
@@ -378,13 +386,15 @@ class Connection extends Thread {
     private String Username;
     private String currentDir;
     private FileAccess fa;
+    private BlockingQueue<String> fq;
 
-    public Connection (Socket aClientSocket, FileAccess FA) {
+    public Connection (Socket aClientSocket, FileAccess FA,BlockingQueue<String> f) {
         try{
             clientSocket = aClientSocket;
             in = new DataInputStream(clientSocket.getInputStream());
             out = new DataOutputStream(clientSocket.getOutputStream());
             fa = FA;
+            fq = f;
             this.start();
         }catch(IOException e){System.out.println("DEBUG: Connection: " + e.getMessage());}
     }
@@ -641,16 +651,19 @@ class Connection extends Thread {
                 String[] info = command.split(" ");
                 String BASE_DIR = System.getProperty("user.dir");
                 String dir = info[1].substring(0, info[1].lastIndexOf("/")); // get dir until file
-                File directory = new File(BASE_DIR +"/home/"+ Username + "/" + dir);
+                File directory = new File(BASE_DIR +"/home/"+ Username + dir);
                 if (!directory.exists()) {
                     if (directory.mkdirs()) {
-                        receiveFile(BASE_DIR + BASE_DIR +"/home/"+ Username + "/" + info[1]);
+                        receiveFile(BASE_DIR +"/home/"+ Username + info[1]);
                     } else {
                         System.out.println("DEBUG: an error ocurred while creating folder");
                     }
                 } else {
                     receiveFile(BASE_DIR +"/home/"+ Username + "/" + info[1]);
                 }
+                String aux = "/home/"+ Username  + info[1];
+                System.out.println("DEBUG: placing - " + aux +" in queue");
+                fq.put(aux);
                 return "";
             }
 
@@ -666,7 +679,15 @@ class ConnectionUDP extends Thread {
     private int serverHierarchy;
     private String address;
     private int port;
+    private BlockingQueue<String> fq;
 
+    public ConnectionUDP(int serverHierarchy, String address, int port,BlockingQueue<String> filequeue){
+        this.serverHierarchy = serverHierarchy;
+        this.address = address;
+        this.port = port;
+        this.fq = filequeue;
+        this.start();
+    }
     public ConnectionUDP(int serverHierarchy, String address, int port){
         this.serverHierarchy = serverHierarchy;
         this.address = address;
@@ -674,18 +695,19 @@ class ConnectionUDP extends Thread {
         this.start();
     }
 
-    public ConnectionUDP(int serverHierarchy, int port){
-        this.serverHierarchy = serverHierarchy;
-        this.port = port;
-        this.start();
-    }
-
     public void run() {
         if (serverHierarchy == 1) {
             //send
-            //ver path da queue
-            String path = System.getProperty("user.dir") + "/home/lopes/img.png";
-            sendFileUDP(path);
+            while(true) {
+
+                try {
+                    String path = System.getProperty("user.dir") + fq.take();
+                    System.out.println("DEBUG: saving file: "+ path+" on second server");
+                    sendFileUDP(path);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         }
         else {
             //receive
@@ -707,7 +729,6 @@ class ConnectionUDP extends Thread {
 
     public void sendFileUDP(String filePath) {
         try {
-            Thread.sleep(15000);
             System.out.println("Backup Started");
             MulticastSocket ssocket = new MulticastSocket();
             InetAddress sgroup = InetAddress.getByName("224.3.2.3");
@@ -779,18 +800,19 @@ class ConnectionUDP extends Thread {
                 }
             }
 
+            ssocket.close();
+            rsocket.close();
+
         } catch (SocketException e) {
             System.out.println("Socket UDP S: " + e.getMessage());
         } catch (IOException e) {
             System.out.println("IO: " + e.getMessage());
-        } catch (InterruptedException e) {
-            e.printStackTrace();
         }
     }
 
     public void receiveFileUDP() {
         try {
-            Thread.sleep(10000);
+
             System.out.println("Backup Started");
             MulticastSocket ssocket = new MulticastSocket();
             InetAddress sgroup = InetAddress.getByName("224.3.2.4");
@@ -801,7 +823,23 @@ class ConnectionUDP extends Thread {
 
             byte[] filePathBytes = new byte[1024];
             DatagramPacket filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length);
-            rsocket.receive(filePathPacket);
+
+            while(true) {
+                try{
+                    rsocket.setSoTimeout(1000);
+                    rsocket.receive(filePathPacket);
+                    break;
+                } catch (SocketTimeoutException e) {
+                    int num = Thread.activeCount();
+                    if(num == 3){ // heartbeat in not running anymore,meaning main server died
+                                        // running threads: main,monitor ctrl-break?,heartbeat,pingrecv, pingsend, recevicefiles
+                        return;
+                    }
+                }
+
+            }
+
+
             byte[] data = filePathPacket.getData();
             String filePath = new String(data, 0, filePathPacket.getLength());
 
@@ -819,7 +857,21 @@ class ConnectionUDP extends Thread {
 
                 // Receive packet and retrieve the data
                 DatagramPacket receivedPacket = new DatagramPacket(message, message.length);
-                rsocket.receive(receivedPacket);
+
+                while(true) {
+                    try{
+                        rsocket.setSoTimeout(1000);
+                        rsocket.receive(receivedPacket);
+                        break;
+                    } catch (SocketTimeoutException e) {
+                        int num = Thread.activeCount();
+                        if(num==3){ // heartbeat in not running anymore,meaning main server died
+                            return;
+                        }
+                    }
+
+                }
+
                 message = receivedPacket.getData(); // Data to be written to the file
 
                 // Get port and address for sending acknowledgment
@@ -867,12 +919,14 @@ class ConnectionUDP extends Thread {
                 }
             }
 
+            ssocket.close();
+            rsocket.close();
+
         } catch (SocketException e) {
             System.out.println("Socket UDP R: " + e.getMessage());
         } catch (IOException e) {
             System.out.println("IO: " + e.getMessage());
-        } catch (InterruptedException e) {
-            e.printStackTrace();
         }
+
     }
 }
