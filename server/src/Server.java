@@ -24,7 +24,7 @@ public class Server{
         if(serverHierarchy == 2){
             try {
             HeartBeat HB = new HeartBeat(false,InetAddress.getByName("0.0.0.0"),5555,6666);
-            ConnectionUDP backup = new ConnectionUDP(serverHierarchy, otherServerAddress,backupPort);
+            ConnectionUDP backup = new ConnectionUDP(serverHierarchy,"0.0.0.0",9999,8888);
             HB.start();
             HB.join();
             backup.join();
@@ -44,7 +44,7 @@ public class Server{
             BlockingQueue<String> filequeue = new LinkedBlockingQueue<>();
             HeartBeat HB = new HeartBeat(true,InetAddress.getByName("127.0.0.1"),6666,5555);
             HB.start();
-            ConnectionUDP backup = new ConnectionUDP(1, otherServerAddress,backupPort,filequeue);
+            ConnectionUDP backup = new ConnectionUDP(1,"127.0.0.1",8888,9999,filequeue);
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
@@ -94,13 +94,13 @@ class HeartBeat extends Thread{
     public static int hb_default;
 
 
-    public HeartBeat(boolean hierarchy,InetAddress ip,int port,int otherport){
+    public HeartBeat(boolean hierarchy,InetAddress otherip,int port,int otherport){
 
         try {
             socket = new DatagramSocket(port);
             String message = "9";
             buffer = message.getBytes();
-            reply = new DatagramPacket(buffer, buffer.length, ip, otherport);
+            reply = new DatagramPacket(buffer, buffer.length, otherip, otherport);
             request = new DatagramPacket(buffer, buffer.length);
             primary = hierarchy;
             hb_cont = 5; // read from config file
@@ -116,7 +116,7 @@ class HeartBeat extends Thread{
         while (true) {
             try {
                 socket.receive(request);
-                System.out.println("recebi do failover");
+                //System.out.println("recebi do failover");
                 socket.send(reply);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -167,7 +167,7 @@ class HeartBeat extends Thread{
                     socket.setSoTimeout(delay*5);
                     hb_cont = hb_default;
                     socket.receive(request);
-                    System.out.println("recebi");
+                    //System.out.println("recebi");
                     if(hb_cont<0){
                         break;
                     }
@@ -203,7 +203,7 @@ class HeartBeat extends Thread{
             while(true){
                 try {
                     socket.send(reply);
-                    System.out.println("mandei");
+                    //System.out.println("mandei");
                     hb_cont--;
                     Thread.sleep(delay);
                     if(hb_cont<0){
@@ -655,19 +655,22 @@ class ConnectionUDP extends Thread {
     private int serverHierarchy;
     private String address;
     private int port;
+    private int ourport;
     private BlockingQueue<String> fq;
 
-    public ConnectionUDP(int serverHierarchy, String address, int port,BlockingQueue<String> filequeue){
+    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport,BlockingQueue<String> filequeue){
         this.serverHierarchy = serverHierarchy;
         this.address = address;
         this.port = port;
+        this.ourport = otherport;
         this.fq = filequeue;
         this.start();
     }
-    public ConnectionUDP(int serverHierarchy, String address, int port){
+    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport){
         this.serverHierarchy = serverHierarchy;
         this.address = address;
         this.port = port;
+        this.ourport = otherport;
         this.start();
     }
 
@@ -706,13 +709,7 @@ class ConnectionUDP extends Thread {
     public void sendFileUDP(String filePath) {
         try {
             System.out.println("Backup Started");
-            MulticastSocket ssocket = new MulticastSocket();
-            InetAddress sgroup = InetAddress.getByName("224.3.2.3");
-
-            MulticastSocket rsocket = new MulticastSocket(port);
-            InetAddress rgroup = InetAddress.getByName("224.3.2.4");
-            rsocket.joinGroup(rgroup);
-
+            DatagramSocket socket = new DatagramSocket(ourport);
 
             // Send Path
             boolean checkPath;
@@ -720,8 +717,8 @@ class ConnectionUDP extends Thread {
             byte[] fileP = new byte[filePathBytes.length + 1];
             fileP[0] = (byte) (1);
             System.arraycopy(filePathBytes, 0, fileP, 1, filePathBytes.length);
-            DatagramPacket filePathPacket = new DatagramPacket(fileP, fileP.length, sgroup, port);
-            ssocket.send(filePathPacket);
+            DatagramPacket filePathPacket = new DatagramPacket(fileP, fileP.length, InetAddress.getByName(address), port);
+            socket.send(filePathPacket);
             System.out.printf("Sent: Path %s\n", new String(fileP, 1, fileP.length-1));
             // Know if the path was received correctly
             while (true) {
@@ -729,8 +726,8 @@ class ConnectionUDP extends Thread {
                 DatagramPacket checkPacket = new DatagramPacket(check, check.length);
 
                 try {
-                    rsocket.setSoTimeout(500); // Waiting for the server to send the ack
-                    rsocket.receive(checkPacket);
+                    socket.setSoTimeout(500); // Waiting for the server to send the ack
+                    socket.receive(checkPacket);
                     checkPath = true; // We received the ack
                 } catch (SocketTimeoutException e) {
                     System.out.println("Socket timed out waiting for ack");
@@ -743,7 +740,7 @@ class ConnectionUDP extends Thread {
                     break;
                 } // Package was not received, so we resend it
                 else {
-                    ssocket.send(filePathPacket);
+                    socket.send(filePathPacket);
                     System.out.println("Resending: Sequence Number = " + check[0]);
                 }
             }
@@ -777,8 +774,8 @@ class ConnectionUDP extends Thread {
                     System.arraycopy(fileBytes, i, data, 3, fileBytes.length - i);
                 }
 
-                DatagramPacket sendPacket = new DatagramPacket(data, data.length, sgroup, port); // The data to be sent
-                ssocket.send(sendPacket);
+                DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getByName(address), port); // The data to be sent
+                socket.send(sendPacket);
                 System.out.println("Sent: Sequence number = " + sequenceNumber);
 
                 // Know if the part of the file was received correctly
@@ -788,8 +785,8 @@ class ConnectionUDP extends Thread {
                     DatagramPacket checkPacket = new DatagramPacket(check, check.length);
 
                     try {
-                        rsocket.setSoTimeout(500); // Waiting for the server to send the ack
-                        rsocket.receive(checkPacket);
+                        socket.setSoTimeout(500); // Waiting for the server to send the ack
+                        socket.receive(checkPacket);
                         ackSequence = ((check[0] & 0xff) << 8) + (check[1] & 0xff); // Figuring the sequence number
                         checkReceived = true; // We received the ack
                     } catch (SocketTimeoutException e) {
@@ -803,14 +800,13 @@ class ConnectionUDP extends Thread {
                         break;
                     } // Package was not received, so we resend it
                     else {
-                        ssocket.send(sendPacket);
+                        socket.send(sendPacket);
                         System.out.println("Resending: Sequence Number = " + sequenceNumber);
                     }
                 }
             }
 
-            ssocket.close();
-            rsocket.close();
+            socket.close();
 
         } catch (SocketException e) {
             System.out.println("Socket UDP S: " + e.getMessage());
@@ -823,12 +819,7 @@ class ConnectionUDP extends Thread {
         try {
 
             System.out.println("Backup Started");
-            MulticastSocket ssocket = new MulticastSocket();
-            InetAddress sgroup = InetAddress.getByName("224.3.2.4");
-
-            MulticastSocket rsocket = new MulticastSocket(port);
-            InetAddress rgroup = InetAddress.getByName("224.3.2.3");
-            rsocket.joinGroup(rgroup);
+            DatagramSocket socket = new DatagramSocket(ourport);
 
 
             // Receive Path
@@ -837,8 +828,8 @@ class ConnectionUDP extends Thread {
 
             while(true) {
                 try{
-                    rsocket.setSoTimeout(1000);
-                    rsocket.receive(filePathPacket);
+                    socket.setSoTimeout(1000);
+                    socket.receive(filePathPacket);
                     break;
                 } catch (SocketTimeoutException e) {
                     int num = Thread.activeCount();
@@ -855,8 +846,8 @@ class ConnectionUDP extends Thread {
             byte[] checkPath = new byte[1];
             checkPath[0] = data[0];
             // the datagram packet to be sent
-            DatagramPacket ackPathPacket = new DatagramPacket(checkPath, checkPath.length, sgroup, port);
-            ssocket.send(ackPathPacket);
+            DatagramPacket ackPathPacket = new DatagramPacket(checkPath, checkPath.length, InetAddress.getByName(address), port);
+            socket.send(ackPathPacket);
             System.out.println("Sent path ack: Sequence Number = " + checkPath[0]);
 
 
@@ -880,8 +871,8 @@ class ConnectionUDP extends Thread {
 
                 while(true) {
                     try{
-                        rsocket.setSoTimeout(1000);
-                        rsocket.receive(receivedPacket);
+                        socket.setSoTimeout(1000);
+                        socket.receive(receivedPacket);
                         break;
                     } catch (SocketTimeoutException e) {
                         int num = Thread.activeCount();
@@ -929,8 +920,8 @@ class ConnectionUDP extends Thread {
                 checkPacket[0] = (byte) (foundLast >> 8);
                 checkPacket[1] = (byte) (foundLast);
                 // the datagram packet to be sent
-                DatagramPacket acknowledgement = new DatagramPacket(checkPacket, checkPacket.length, sgroup, port);
-                ssocket.send(acknowledgement);
+                DatagramPacket acknowledgement = new DatagramPacket(checkPacket, checkPacket.length, InetAddress.getByName(address), port);
+                socket.send(acknowledgement);
                 System.out.println("Sent ack: Sequence Number = " + foundLast);
 
                 // Check for last datagram
@@ -940,8 +931,8 @@ class ConnectionUDP extends Thread {
                 }
             }
 
-            ssocket.close();
-            rsocket.close();
+            socket.close();
+            socket.close();
 
         } catch (SocketException e) {
             System.out.println("Socket UDP R: " + e.getMessage());
