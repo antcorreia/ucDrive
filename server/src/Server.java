@@ -1,4 +1,3 @@
-import javax.xml.crypto.Data;
 import java.net.*;
 import java.io.*;
 import java.util.ArrayList;
@@ -12,19 +11,28 @@ public class Server{
     public static void main(String[] args){
         Scanner sc = new Scanner(System.in);
 
-        ArrayList<String> connectionInfo = getConnectionInfo(sc);
-        String serverAddress = connectionInfo.get(0);
-        int serverPort = Integer.parseInt(connectionInfo.get(1));
-        int serverHierarchy = Integer.parseInt(connectionInfo.get(2));
-        int hbPort = Integer.parseInt(connectionInfo.get(3));
-        int backupPort = Integer.parseInt(connectionInfo.get(4));
-        String otherServerAddress = connectionInfo.get(5);
+        if(args.length!=1){
+            System.out.println("USAGE: java server hierachy ( where hierachy is 1 or 2 )");
+            return;
+        }
+
+        int serverHierarchy = Integer.parseInt(args[0]);
         FileAccess FA = new FileAccess();
+        ArrayList<String> config = FA.getconfig(serverHierarchy);
+        String serverAddress = config.get(0);
+        int serverPort = Integer.parseInt(config.get(1));
+        int HBPort = Integer.parseInt(config.get(2));
+        int BUPort = Integer.parseInt(config.get(3));
+        String otherip = config.get(4);
+        int otherHBPort = Integer.parseInt(config.get(5));
+        int otherBUPort = Integer.parseInt(config.get(6));
+        int HBdelay = Integer.parseInt(config.get(7));
+        int HBmax = Integer.parseInt(config.get(8));
 
         if(serverHierarchy == 2){
             try {
-            HeartBeat HB = new HeartBeat(false,InetAddress.getByName("0.0.0.0"),5555,6666);
-            ConnectionUDP backup = new ConnectionUDP(serverHierarchy,"0.0.0.0",9999,8888);
+            HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay);
+            ConnectionUDP backup = new ConnectionUDP(serverHierarchy,otherip,otherBUPort,BUPort,HB);
             HB.start();
             HB.join();
             backup.join();
@@ -42,9 +50,9 @@ public class Server{
             listenSocket.bind(sockaddr);
 
             BlockingQueue<String> filequeue = new LinkedBlockingQueue<>();
-            HeartBeat HB = new HeartBeat(true,InetAddress.getByName("127.0.0.1"),6666,5555);
+            HeartBeat HB = new HeartBeat(true,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay);
             HB.start();
-            ConnectionUDP backup = new ConnectionUDP(1,"127.0.0.1",8888,9999,filequeue);
+            ConnectionUDP backup = new ConnectionUDP(1,otherip,otherBUPort,BUPort,filequeue);
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
             while(true) {
@@ -57,31 +65,6 @@ public class Server{
             System.out.println("Listen: " + e.getMessage());
         }
     }
-
-    public static ArrayList<String> getConnectionInfo(Scanner sc) {
-        ArrayList<String> info = new ArrayList<>();
-
-        System.out.print("Insert the Server IP Address: ");
-        info.add(sc.nextLine());
-        System.out.print("Insert the Server Port: ");
-        info.add(sc.nextLine());
-        System.out.print("Press 1 if server is primary, 2 if is secundary: ");
-        info.add(sc.nextLine());
-        System.out.print("HeartBeat Port: ");
-        info.add(sc.nextLine());
-        System.out.print("Backup Port: ");
-        info.add(sc.nextLine());
-        if(info.get(2).equals("2")){
-            System.out.print("Main IP: ");
-            info.add(sc.nextLine());
-        }
-        else if(info.get(2).equals("1")){
-            System.out.print("Secondary IP: ");
-            info.add(sc.nextLine());
-        }
-
-        return info;
-    }
 }
 
 class HeartBeat extends Thread{
@@ -92,9 +75,9 @@ class HeartBeat extends Thread{
     private boolean primary;
     public static int hb_cont;
     public static int hb_default;
+    public static int delay;
 
-
-    public HeartBeat(boolean hierarchy,InetAddress otherip,int port,int otherport){
+    public HeartBeat(boolean hierarchy,InetAddress otherip,int otherport,int port, int cont, int d){
 
         try {
             socket = new DatagramSocket(port);
@@ -105,6 +88,7 @@ class HeartBeat extends Thread{
             primary = hierarchy;
             hb_cont = 5; // read from config file
             hb_default = hb_cont;
+            delay = d;
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -132,9 +116,9 @@ class HeartBeat extends Thread{
             ackping();
         }
         else{
-            PingRecv pingrecv = new PingRecv(request,socket);
+            PingRecv pingrecv = new PingRecv(request,socket,delay,hb_cont);
             pingrecv.start();
-            PingSend pingsend = new PingSend(reply,socket);
+            PingSend pingsend = new PingSend(reply,socket,delay);
             pingsend.start();
 
             try {
@@ -143,7 +127,7 @@ class HeartBeat extends Thread{
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-
+            socket.close();
         }
 
     }
@@ -153,18 +137,20 @@ class HeartBeat extends Thread{
         private DatagramPacket request;
         private DatagramSocket socket;
         private int delay;
+        private int max;
 
-        public PingRecv( DatagramPacket r, DatagramSocket s){
+        public PingRecv( DatagramPacket r, DatagramSocket s, int d, int m){
             request = r;
             socket = s;
-            delay = 2000; // READ FROM CONFIG
+            delay = d;
+            max = m;
         }
 
         public void run(){
 
             while(true){
                 try {
-                    socket.setSoTimeout(delay*5);
+                    socket.setSoTimeout(delay*max); // equals the amount of time to send all ack iteration
                     hb_cont = hb_default;
                     socket.receive(request);
                     //System.out.println("recebi");
@@ -180,7 +166,6 @@ class HeartBeat extends Thread{
                 }
 
             }
-            socket.close();
 
         }
 
@@ -192,8 +177,8 @@ class HeartBeat extends Thread{
         private DatagramSocket socket;
         private int delay;
 
-        public PingSend(DatagramPacket r,DatagramSocket s){
-            delay = 2000; // read from config file
+        public PingSend(DatagramPacket r,DatagramSocket s, int d){
+            delay = d;
             socket = s;
             reply = r;
         }
@@ -217,7 +202,6 @@ class HeartBeat extends Thread{
                 }
 
             }
-            socket.close();
 
         }
 
@@ -235,7 +219,7 @@ class FileAccess {
         try {
             sem.doWait();
             String BASE_DIR = System.getProperty("user.dir");
-            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
             while (reader.hasNextLine()) {
                 String user = reader.nextLine();
@@ -263,7 +247,7 @@ class FileAccess {
         try {
             sem.doWait();
             String BASE_DIR = System.getProperty("user.dir");
-            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
             while (reader.hasNextLine()) {
                 String user = reader.nextLine();
@@ -276,7 +260,7 @@ class FileAccess {
             }
             reader.close();
 
-            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients/clients.txt");
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
             for (String s: lines) {
                 fileWriter.write(s + "\n");
             }
@@ -298,7 +282,7 @@ class FileAccess {
         try {
             sem.doWait();
             String BASE_DIR = System.getProperty("user.dir");
-            File file = new File(BASE_DIR + "/home/clients/clients.txt");
+            File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
             while (reader.hasNextLine()) {
                 String user = reader.nextLine();
@@ -311,7 +295,7 @@ class FileAccess {
             }
             reader.close();
 
-            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients/clients.txt");
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
             for (String s: lines) {
                 fileWriter.write(s + "\n");
             }
@@ -325,6 +309,37 @@ class FileAccess {
         }
         sem.doSignal();
         return changed;
+    }
+
+    public ArrayList<String> getconfig(int a){
+        String s;
+        if(a==1){
+            s = "/home/config.txt";
+        }
+        else{
+            s = "/home/otherconfig.txt";
+        }
+
+        ArrayList<String> config = new ArrayList<>();
+        try {
+            String BASE_DIR = System.getProperty("user.dir");
+            File file = new File(BASE_DIR + s);
+            Scanner reader = new Scanner(file);
+            while (reader.hasNextLine()) {
+                String line = reader.nextLine();
+                if(!line.startsWith("// ")){
+                    String[] values = line.split(": ");
+                    if(values.length==2){
+                        config.add(values[1]);
+                    }
+                }
+
+            }
+            reader.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        return config;
     }
 
 }
@@ -608,7 +623,7 @@ class Connection extends Thread {
                 return output.toString();
             }
 
-            else if(command.startsWith("save ")){
+            else if(command.startsWith("download ")){
                 String[] info = command.split(" ");
                 String BASE_DIR = System.getProperty("user.dir");
                 File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + info[1]);
@@ -657,6 +672,7 @@ class ConnectionUDP extends Thread {
     private int port;
     private int ourport;
     private BlockingQueue<String> fq;
+    private HeartBeat HB;
 
     public ConnectionUDP(int serverHierarchy, String address, int port,int otherport,BlockingQueue<String> filequeue){
         this.serverHierarchy = serverHierarchy;
@@ -666,11 +682,12 @@ class ConnectionUDP extends Thread {
         this.fq = filequeue;
         this.start();
     }
-    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport){
+    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport, HeartBeat hb){
         this.serverHierarchy = serverHierarchy;
         this.address = address;
         this.port = port;
         this.ourport = otherport;
+        this.HB = hb;
         this.start();
     }
 
@@ -828,13 +845,11 @@ class ConnectionUDP extends Thread {
 
             while(true) {
                 try{
-                    socket.setSoTimeout(1000);
+                    socket.setSoTimeout(HB.delay);
                     socket.receive(filePathPacket);
                     break;
                 } catch (SocketTimeoutException e) {
-                    int num = Thread.activeCount();
-                    if(num == 3){ // heartbeat in not running anymore,meaning main server died
-                                        // running threads: main,monitor ctrl-break?,heartbeat,pingrecv, pingsend, recevicefiles
+                    if(HB.isAlive()){
                         return;
                     }
                 }
@@ -871,16 +886,14 @@ class ConnectionUDP extends Thread {
 
                 while(true) {
                     try{
-                        socket.setSoTimeout(1000);
-                        socket.receive(receivedPacket);
+                        socket.setSoTimeout(HB.delay);
+                        socket.receive(filePathPacket);
                         break;
                     } catch (SocketTimeoutException e) {
-                        int num = Thread.activeCount();
-                        if(num==3){ // heartbeat in not running anymore,meaning main server died
+                        if(HB.isAlive()){
                             return;
                         }
                     }
-
                 }
 
                 message = receivedPacket.getData(); // Data to be written to the file
@@ -931,7 +944,6 @@ class ConnectionUDP extends Thread {
                 }
             }
 
-            socket.close();
             socket.close();
 
         } catch (SocketException e) {
