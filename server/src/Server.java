@@ -1,4 +1,3 @@
-import javax.xml.crypto.Data;
 import java.net.*;
 import java.io.*;
 import java.util.ArrayList;
@@ -23,8 +22,8 @@ public class Server{
 
         if(serverHierarchy == 2){
             try {
-            HeartBeat HB = new HeartBeat(false,InetAddress.getByName("0.0.0.0"),5555,6666);
-            ConnectionUDP backup = new ConnectionUDP(serverHierarchy,"0.0.0.0",9999,8888);
+            HeartBeat HB = new HeartBeat(false,InetAddress.getByName("127.0.0.1"),5555,6666);
+            ConnectionUDP backup = new ConnectionUDP(serverHierarchy,"127.0.0.1",9999,8888);
             HB.start();
             HB.join();
             backup.join();
@@ -85,7 +84,6 @@ public class Server{
 }
 
 class HeartBeat extends Thread{
-
     private DatagramPacket request, reply;
     private DatagramSocket socket;
     private static byte[] buffer = new byte[1];
@@ -226,7 +224,6 @@ class HeartBeat extends Thread{
 }
 
 class FileAccess {
-
     Semaphore sem = new Semaphore(1);
 
     public ArrayList<String> getUserInfo(String username) {
@@ -330,7 +327,6 @@ class FileAccess {
 }
 
 class Semaphore {
-
     int val;
 
     public Semaphore(int val) {
@@ -566,6 +562,12 @@ class Connection extends Thread {
                     if (directory.mkdirs()) {
                         System.out.println("DEBUG: Directory has been created successfully");
                         currentDir = currentDir + "/" + newFolder;
+
+                        String aux = "/home/"  + currentDir;
+                        System.out.println("DEBUG: placing - " + aux +" in queue");
+                        fq.put("Folder");
+                        fq.put(aux);
+
                         return "server /" + currentDir + " > " ;
                     }
                     else {
@@ -608,7 +610,7 @@ class Connection extends Thread {
                 return output.toString();
             }
 
-            else if(command.startsWith("save ")){
+            else if(command.startsWith("download ")){
                 String[] info = command.split(" ");
                 String BASE_DIR = System.getProperty("user.dir");
                 File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + info[1]);
@@ -637,8 +639,9 @@ class Connection extends Thread {
                 } else {
                     receiveFile(BASE_DIR +"/home/"+ Username + "/" + info[1]);
                 }
-                String aux = "/home/"+ Username  + info[1];
+                String aux = "/home/"+ Username + info[1];
                 System.out.println("DEBUG: placing - " + aux +" in queue");
+                fq.put("File");
                 fq.put(aux);
                 return "";
             }
@@ -677,20 +680,40 @@ class ConnectionUDP extends Thread {
     public void run() {
         if (serverHierarchy == 1) {
             //send
-            while(true) {
 
-                try {
-                    String path = System.getProperty("user.dir") + fq.take();
-                    System.out.println("DEBUG: saving file: "+ path+" on second server");
-                    sendFileUDP(path);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+            try {
+                DatagramSocket socket = new DatagramSocket(ourport);
+
+                while (true) {
+                    try {
+                        String type = fq.take();
+                        String path = fq.take();
+                        System.out.println("DEBUG: saving file: " + path + " on second server");
+                        sendFileUDP(socket, type, path);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
+
+                //socket.close();
+            } catch (SocketException e) {
+                e.printStackTrace();
             }
+
         }
         else {
             //receive
-            receiveFileUDP();
+            boolean run = true;
+
+            try {
+                DatagramSocket socket = new DatagramSocket(ourport);
+                while (run) {
+                    run = receiveFileUDP(socket);
+                }
+                socket.close();
+            } catch (SocketException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -706,20 +729,20 @@ class ConnectionUDP extends Thread {
         return b;
     }
 
-    public void sendFileUDP(String filePath) {
-        try {
-            System.out.println("Backup Started");
-            DatagramSocket socket = new DatagramSocket(ourport);
+    public void sendFileUDP(DatagramSocket socket, String fileType, String filePath) {
+        System.out.println("Backup Started");
+        String type_path = fileType + '_' + filePath;
 
-            // Send Path
-            boolean checkPath;
-            byte[] filePathBytes = filePath.getBytes();
-            byte[] fileP = new byte[filePathBytes.length + 1];
-            fileP[0] = (byte) (1);
-            System.arraycopy(filePathBytes, 0, fileP, 1, filePathBytes.length);
-            DatagramPacket filePathPacket = new DatagramPacket(fileP, fileP.length, InetAddress.getByName(address), port);
+        try {
+            // Send Type and Path
+            boolean checkTypePath;
+            byte[] fileTypePathBytes = type_path.getBytes();
+            byte[] fileTP = new byte[fileTypePathBytes.length + 1];
+            fileTP[0] = (byte) (1);
+            System.arraycopy(fileTypePathBytes, 0, fileTP, 1, fileTypePathBytes.length);
+            DatagramPacket filePathPacket = new DatagramPacket(fileTP, fileTP.length, InetAddress.getByName(address), port);
             socket.send(filePathPacket);
-            System.out.printf("Sent: Path %s\n", new String(fileP, 1, fileP.length-1));
+            System.out.printf("Sent: Path %s\n", new String(fileTP, 1, fileTP.length - 1));
             // Know if the path was received correctly
             while (true) {
                 byte[] check = new byte[1]; // Create another packet for datagram ackknowledgement
@@ -728,14 +751,14 @@ class ConnectionUDP extends Thread {
                 try {
                     socket.setSoTimeout(500); // Waiting for the server to send the ack
                     socket.receive(checkPacket);
-                    checkPath = true; // We received the ack
+                    checkTypePath = true; // We received the ack
                 } catch (SocketTimeoutException e) {
                     System.out.println("Socket timed out waiting for ack");
-                    checkPath = false; // We did not receive an ack
+                    checkTypePath = false; // We did not receive an ack
                 }
 
                 // If the package was received correctly next packet can be sent
-                if ((check[0] == fileP[0]) && (checkPath)) {
+                if ((check[0] == fileTP[0]) && (checkTypePath)) {
                     System.out.println("Ack received: Sequence Number = " + check[0]);
                     break;
                 } // Package was not received, so we resend it
@@ -745,69 +768,67 @@ class ConnectionUDP extends Thread {
                 }
             }
 
+            if (fileType.equals("File")) {
+                // Send File
+                File f = new File(System.getProperty("user.dir") + filePath);
+                byte[] fileBytes = readFileToByteArray(f);
 
-            // Send File
-            File f = new File(filePath);
-            byte[] fileBytes = readFileToByteArray(f);
+                int sequenceNumber = 0; // For order
+                boolean eofFlag; // To see if we got to the end of the file
+                int ackSequence = 0; // To see if the datagram was received correctly
+                for (int i = 0; i < fileBytes.length; i = i + 1021) {
+                    // Send part of the file
+                    sequenceNumber += 1;
+                    byte[] data = new byte[1024]; // First two bytes of the data are for control (datagram integrity and order)
+                    data[0] = (byte) (sequenceNumber >> 8);
+                    data[1] = (byte) (sequenceNumber);
 
-            int sequenceNumber = 0; // For order
-            boolean eofFlag; // To see if we got to the end of the file
-            int ackSequence = 0; // To see if the datagram was received correctly
-            for (int i = 0; i < fileBytes.length; i = i + 1021) {
-                // Send part of the file
-                sequenceNumber += 1;
-                byte[] data = new byte[1024]; // First two bytes of the data are for control (datagram integrity and order)
-                data[0] = (byte) (sequenceNumber >> 8);
-                data[1] = (byte) (sequenceNumber);
-
-                if ((i + 1021) >= fileBytes.length) { // Have we reached the end of file?
-                    eofFlag = true;
-                    data[2] = (byte) (1); // We reached the end of the file (last datagram to be send)
-                } else {
-                    eofFlag = false;
-                    data[2] = (byte) (0); // We haven't reached the end of the file, still sending datagrams
-                }
-
-                if (!eofFlag) {
-                    System.arraycopy(fileBytes, i, data, 3, 1021);
-                } else { // If it is the last datagram
-                    System.arraycopy(fileBytes, i, data, 3, fileBytes.length - i);
-                }
-
-                DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getByName(address), port); // The data to be sent
-                socket.send(sendPacket);
-                System.out.println("Sent: Sequence number = " + sequenceNumber);
-
-                // Know if the part of the file was received correctly
-                boolean checkReceived;
-                while (true) {
-                    byte[] check = new byte[2]; // Create another packet for datagram ackknowledgement
-                    DatagramPacket checkPacket = new DatagramPacket(check, check.length);
-
-                    try {
-                        socket.setSoTimeout(500); // Waiting for the server to send the ack
-                        socket.receive(checkPacket);
-                        ackSequence = ((check[0] & 0xff) << 8) + (check[1] & 0xff); // Figuring the sequence number
-                        checkReceived = true; // We received the ack
-                    } catch (SocketTimeoutException e) {
-                        System.out.println("Socket timed out waiting for ack");
-                        checkReceived = false; // We did not receive an ack
+                    if ((i + 1021) >= fileBytes.length) { // Have we reached the end of file?
+                        eofFlag = true;
+                        data[2] = (byte) (1); // We reached the end of the file (last datagram to be send)
+                    } else {
+                        eofFlag = false;
+                        data[2] = (byte) (0); // We haven't reached the end of the file, still sending datagrams
                     }
 
-                    // If the package was received correctly next packet can be sent
-                    if ((ackSequence == sequenceNumber) && (checkReceived)) {
-                        System.out.println("Ack received: Sequence Number = " + ackSequence);
-                        break;
-                    } // Package was not received, so we resend it
-                    else {
-                        socket.send(sendPacket);
-                        System.out.println("Resending: Sequence Number = " + sequenceNumber);
+                    if (!eofFlag) {
+                        System.arraycopy(fileBytes, i, data, 3, 1021);
+                    } else { // If it is the last datagram
+                        System.arraycopy(fileBytes, i, data, 3, fileBytes.length - i);
+                    }
+
+                    DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getByName(address), port); // The data to be sent
+                    socket.send(sendPacket);
+                    System.out.println("Sent: Sequence number = " + sequenceNumber);
+
+                    // Know if the part of the file was received correctly
+                    boolean checkReceived;
+                    while (true) {
+                        byte[] check = new byte[2]; // Create another packet for datagram ackknowledgement
+                        DatagramPacket checkPacket = new DatagramPacket(check, check.length);
+
+                        try {
+                            socket.setSoTimeout(500); // Waiting for the server to send the ack
+                            socket.receive(checkPacket);
+                            ackSequence = ((check[0] & 0xff) << 8) + (check[1] & 0xff); // Figuring the sequence number
+                            checkReceived = true; // We received the ack
+                        } catch (SocketTimeoutException e) {
+                            System.out.println("Socket timed out waiting for ack");
+                            checkReceived = false; // We did not receive an ack
+                        }
+
+                        // If the package was received correctly next packet can be sent
+                        if ((ackSequence == sequenceNumber) && (checkReceived)) {
+                            System.out.println("Ack received: Sequence Number = " + ackSequence);
+                            break;
+                        } // Package was not received, so we resend it
+                        else {
+                            socket.send(sendPacket);
+                            System.out.println("Resending: Sequence Number = " + sequenceNumber);
+                        }
                     }
                 }
             }
-
-            socket.close();
-
         } catch (SocketException e) {
             System.out.println("Socket UDP S: " + e.getMessage());
         } catch (IOException e) {
@@ -815,130 +836,158 @@ class ConnectionUDP extends Thread {
         }
     }
 
-    public void receiveFileUDP() {
+    public boolean receiveFileUDP(DatagramSocket socket) {
+        System.out.println("Backup Started");
+
         try {
-
-            System.out.println("Backup Started");
-            DatagramSocket socket = new DatagramSocket(ourport);
-
-
+            byte[] data;
+            DatagramPacket fileTypePathPacket;
+            boolean dataFlag = false;
             // Receive Path
-            byte[] filePathBytes = new byte[1024];
-            DatagramPacket filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length);
-
-            while(true) {
-                try{
-                    socket.setSoTimeout(1000);
-                    socket.receive(filePathPacket);
-                    break;
-                } catch (SocketTimeoutException e) {
-                    int num = Thread.activeCount();
-                    if(num == 3){ // heartbeat in not running anymore,meaning main server died
-                                        // running threads: main,monitor ctrl-break?,heartbeat,pingrecv, pingsend, recevicefiles
-                        return;
-                    }
-                }
-            }
-
-            byte[] data = filePathPacket.getData();
-
-            // Send confirmation
-            byte[] checkPath = new byte[1];
-            checkPath[0] = data[0];
-            // the datagram packet to be sent
-            DatagramPacket ackPathPacket = new DatagramPacket(checkPath, checkPath.length, InetAddress.getByName(address), port);
-            socket.send(ackPathPacket);
-            System.out.println("Sent path ack: Sequence Number = " + checkPath[0]);
-
-
-            // Receive File
-            String filePath = new String(data, 1, filePathPacket.getLength());
-            System.out.println(filePath);
-            String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa.png"; // get dir until file
-            File f = new File(a);
-            FileOutputStream fos = new FileOutputStream(f);
-
-            int sequenceNumber = 0; // Order of sequences
-            boolean eofFlag; // Have we reached end of file
-            int foundLast = 0; // The las sequence found
-
             while (true) {
-                byte[] message = new byte[1024]; // Where the data from the received datagram is stored
-                byte[] fileByteArray = new byte[1021]; // Where we store the data to be writen to the file
+                byte[] fileTypePathBytes = new byte[1024];
+                fileTypePathPacket = new DatagramPacket(fileTypePathBytes, fileTypePathBytes.length);
 
-                // Receive packet and retrieve the data
-                DatagramPacket receivedPacket = new DatagramPacket(message, message.length);
-
-                while(true) {
-                    try{
+                while (true) {
+                    try {
                         socket.setSoTimeout(1000);
-                        socket.receive(receivedPacket);
+                        socket.receive(fileTypePathPacket);
                         break;
                     } catch (SocketTimeoutException e) {
                         int num = Thread.activeCount();
-                        if(num==3){ // heartbeat in not running anymore,meaning main server died
-                            return;
+                        if (num == 3) { // heartbeat in not running anymore,meaning main server died
+                            // running threads: main,monitor ctrl-break?,heartbeat,pingrecv, pingsend, recevicefiles
+                            return false;
                         }
                     }
-
                 }
 
-                message = receivedPacket.getData(); // Data to be written to the file
+                data = fileTypePathPacket.getData();
 
-                // Get port and address for sending acknowledgment
-                //InetAddress address = receivedPacket.getAddress();
-                //int port = receivedPacket.getPort();
-
-                // Retrieve sequence number
-                sequenceNumber = ((message[0] & 0xff) << 8) + (message[1] & 0xff);
-                // Check if we reached last datagram (end of file)
-                eofFlag = (message[2] & 0xff) == 1;
-
-                // If sequence number is the last seen + 1, then it is correct
-                // We get the data from the message and write the ack that it has been received correctly
-                if (sequenceNumber == (foundLast + 1)) {
-
-                    // set the last sequence number to be the one we just received
-                    foundLast = sequenceNumber;
-
-                    // Retrieve data from message
-                    System.arraycopy(message, 3, fileByteArray, 0, 1021);
-
-                    // Write the retrieved data to the file and print received data sequence number
-                    fos.write(fileByteArray);
-                    System.out.println("Received: Sequence number:" + foundLast);
-
-                    // Send acknowledgement
-                    //sendAck(foundLast, socket, address, port);
-                } else {
-                    System.out.println("Expected sequence number: " + (foundLast + 1) + " but received " + sequenceNumber + ". DISCARDING");
-                    // Re send the acknowledgement
-                    //sendAck(foundLast, socket, address, port);
-                }
                 // Send confirmation
-                byte[] checkPacket = new byte[2];
-                checkPacket[0] = (byte) (foundLast >> 8);
-                checkPacket[1] = (byte) (foundLast);
+                byte[] checkTypePath = new byte[1];
+                checkTypePath[0] = data[0];
                 // the datagram packet to be sent
-                DatagramPacket acknowledgement = new DatagramPacket(checkPacket, checkPacket.length, InetAddress.getByName(address), port);
-                socket.send(acknowledgement);
-                System.out.println("Sent ack: Sequence Number = " + foundLast);
+                DatagramPacket ackPathPacket = new DatagramPacket(checkTypePath, checkTypePath.length, InetAddress.getByName(address), port);
+                socket.send(ackPathPacket);
+                System.out.println("Sent path ack: Sequence Number = " + checkTypePath[0]);
 
-                // Check for last datagram
-                if (eofFlag) {
-                    fos.close();
+                if (checkTypePath[0] == (byte) (1))
+                    dataFlag = true;
+
+                if (dataFlag) {
                     break;
                 }
             }
 
-            socket.close();
-            socket.close();
 
+            String fileTypePath = new String(data, 1, fileTypePathPacket.getLength());
+            System.out.println("Path received: " + fileTypePath);
+            String fileType = fileTypePath.substring(0, fileTypePath.indexOf("_"));
+            String filePath = fileTypePath.substring(fileTypePath.indexOf("_")+1);
+
+            if (fileType.equals("File")) {
+                // Receive File
+                String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa.png"; // get dir until file
+                System.out.println("Open " + System.getProperty("user.dir") + a);
+                File f = new File(System.getProperty("user.dir") + a);
+                FileOutputStream fos = new FileOutputStream(f);
+
+                int sequenceNumber = 0; // Order of sequences
+                boolean eofFlag; // Have we reached end of file
+                int foundLast = 0; // The las sequence found
+
+                while (true) {
+                    byte[] message = new byte[1024]; // Where the data from the received datagram is stored
+                    byte[] fileByteArray = new byte[1021]; // Where we store the data to be writen to the file
+
+                    // Receive packet and retrieve the data
+                    DatagramPacket receivedPacket = new DatagramPacket(message, message.length);
+
+                    while (true) {
+                        try {
+                            socket.setSoTimeout(1000);
+                            socket.receive(receivedPacket);
+                            break;
+                        } catch (SocketTimeoutException e) {
+                            int num = Thread.activeCount();
+                            if (num == 3) { // heartbeat in not running anymore,meaning main server died
+                                return false;
+                            }
+                        }
+                    }
+
+                    message = receivedPacket.getData(); // Data to be written to the file
+
+                    // Get port and address for sending acknowledgment
+                    //InetAddress address = receivedPacket.getAddress();
+                    //int port = receivedPacket.getPort();
+
+                    // Retrieve sequence number
+                    sequenceNumber = ((message[0] & 0xff) << 8) + (message[1] & 0xff);
+                    // Check if we reached last datagram (end of file)
+                    eofFlag = (message[2] & 0xff) == 1;
+
+                    // If sequence number is the last seen + 1, then it is correct
+                    // We get the data from the message and write the ack that it has been received correctly
+                    if (sequenceNumber == (foundLast + 1)) {
+
+                        // set the last sequence number to be the one we just received
+                        foundLast = sequenceNumber;
+
+                        // Retrieve data from message
+                        System.arraycopy(message, 3, fileByteArray, 0, 1021);
+
+                        // Write the retrieved data to the file and print received data sequence number
+                        fos.write(fileByteArray);
+                        System.out.println("Received: Sequence number:" + foundLast);
+
+                        // Send acknowledgement
+                        //sendAck(foundLast, socket, address, port);
+                    } else {
+                        System.out.println("Expected sequence number: " + (foundLast + 1) + " but received " + sequenceNumber + ". DISCARDING");
+                        // Re send the acknowledgement
+                        //sendAck(foundLast, socket, address, port);
+                    }
+                    // Send confirmation
+                    byte[] checkPacket = new byte[2];
+                    checkPacket[0] = (byte) (foundLast >> 8);
+                    checkPacket[1] = (byte) (foundLast);
+                    // the datagram packet to be sent
+                    DatagramPacket acknowledgement = new DatagramPacket(checkPacket, checkPacket.length, InetAddress.getByName(address), port);
+                    socket.send(acknowledgement);
+                    System.out.println("Sent ack: Sequence Number = " + foundLast);
+
+                    // Check for last datagram
+                    if (eofFlag) {
+                        fos.close();
+                        break;
+                    }
+                }
+            }
+
+            else if (fileType.equals("Folder")) {
+                String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa";
+                File directory = new File(System.getProperty("user.dir") + a);
+                if (!directory.exists()){
+                    System.out.println("DEBUG: " + System.getProperty("user.dir") + a);
+                    if (directory.mkdirs()) {
+                        System.out.println("DEBUG: Directory has been created successfully");
+                    }
+                    else {
+                        System.out.println("DEBUG: Directory cannot be created");
+                    }
+                }
+                else {
+                    System.out.println("DEBUG: Directory already exists");
+                }
+            }
         } catch (SocketException e) {
             System.out.println("Socket UDP R: " + e.getMessage());
         } catch (IOException e) {
             System.out.println("IO: " + e.getMessage());
         }
 
+        return true;
     }
 }
