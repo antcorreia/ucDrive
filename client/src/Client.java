@@ -328,17 +328,22 @@ public class Client {
 
         }
 
-        private void receiveFile(String fileName) throws Exception{
-            int bytes = 0;
-            FileOutputStream fileOutputStream = new FileOutputStream(fileName);
+        private void receiveFile(String fileName){
+            try {
+                int bytes = 0;
+                FileOutputStream fileOutputStream = new FileOutputStream(fileName);
 
-            long size = in.readLong();     // read file size
-            byte[] buffer = new byte[4*1024];
-            while (size > 0 && (bytes = in.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
-                fileOutputStream.write(buffer,0,bytes);
-                size -= bytes;      // read upto file size
+                long size = in.readLong();     // read file size
+                byte[] buffer = new byte[4 * 1024];
+                while (size > 0 && (bytes = in.read(buffer, 0, (int) Math.min(buffer.length, size))) != -1) {
+                    fileOutputStream.write(buffer, 0, bytes);
+                    size -= bytes;      // read upto file size
+                }
+                fileOutputStream.close();
+            } catch (IOException e) {
+                // an error on download server crached
+                // call delete function
             }
-            fileOutputStream.close();
         }
 
         /**

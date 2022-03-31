@@ -22,9 +22,9 @@ public class Server{
             return;
         }
 
-        int serverHierarchy = Integer.parseInt(args[0]);
+        int deletethis = Integer.parseInt(args[0]); // only used for reading config file on same directory delete on final
         FileAccess FA = new FileAccess();
-        ArrayList<String> config = FA.getconfig(serverHierarchy); // delete parameter
+        ArrayList<String> config = FA.getconfig(deletethis); // delete parameter
         String serverAddress = config.get(0);
         int serverPort = Integer.parseInt(config.get(1));
         int HBPort = Integer.parseInt(config.get(2));
@@ -34,20 +34,19 @@ public class Server{
         int otherBUPort = Integer.parseInt(config.get(6));
         int HBdelay = Integer.parseInt(config.get(7));
         int HBmax = Integer.parseInt(config.get(8));
+        String serverHierachy = config.get(9);
 
-        if(serverHierarchy == 2){
-            try {
-            HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay);
-            ConnectionUDP backup = new ConnectionUDP(serverHierarchy,otherip,otherBUPort,BUPort,HB);
-            HB.start();
-            HB.join();
-            backup.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (UnknownHostException e) {
-                e.printStackTrace();
-            }
+
+        try {
+        HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
+        ConnectionUDP backup = new ConnectionUDP(2,otherip,otherBUPort,BUPort,HB);
+        HB.start();
+        HB.join();
+        backup.join();
+        } catch (InterruptedException | UnknownHostException e) {
+            e.printStackTrace();
         }
+
 
         try {
 
@@ -56,7 +55,7 @@ public class Server{
             listenSocket.bind(sockaddr);
 
             BlockingQueue<String> filequeue = new LinkedBlockingQueue<>();
-            HeartBeat HB = new HeartBeat(true,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay);
+            HeartBeat HB = new HeartBeat(true,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
             HB.start();
             ConnectionUDP backup = new ConnectionUDP(1,otherip,otherBUPort,BUPort,filequeue);
 
@@ -89,15 +88,16 @@ class HeartBeat extends Thread{
     private DatagramSocket socket;
     private static byte[] buffer = new byte[1];
     private boolean primary;
+    private static String message;
     public static int hb_cont;
     public static int hb_default;
     public static int delay;
 
-    public HeartBeat(boolean hierarchy,InetAddress otherip,int otherport,int port, int cont, int d){
+    public HeartBeat(boolean hierarchy,InetAddress otherip,int otherport,int port, int cont, int d, String m){
 
         try {
             socket = new DatagramSocket(port);
-            String message = "9";
+            message = m;
             buffer = message.getBytes();
             reply = new DatagramPacket(buffer, buffer.length, otherip, otherport);
             request = new DatagramPacket(buffer, buffer.length);
@@ -169,7 +169,11 @@ class HeartBeat extends Thread{
                     socket.setSoTimeout(delay*max); // equals the amount of time to send all ack iteration
                     hb_cont = hb_default;
                     socket.receive(request);
-                    //System.out.println("recebi");
+                    int r = Integer.parseInt(new String(request.getData(), 0, request.getLength()));
+                    System.out.println(r);
+                    if(r < Integer.parseInt(message)){ // 2 < 1
+                        break;
+                    }
                     if(hb_cont<0){
                         break;
                     }
@@ -483,17 +487,23 @@ class Connection extends Thread {
         fileInputStream.close();
     }
 
-    private void receiveFile(String fileName) throws Exception{
-        int bytes = 0;
-        FileOutputStream fileOutputStream = new FileOutputStream(fileName);
+    private void receiveFile(String fileName){
+        try {
+            int bytes = 0;
+            FileOutputStream fileOutputStream = new FileOutputStream(fileName);
 
-        long size = in.readLong();     // read file size
-        byte[] buffer = new byte[4*1024];
-        while (size > 0 && (bytes = in.read(buffer, 0, (int)Math.min(buffer.length, size))) != -1) {
-            fileOutputStream.write(buffer,0,bytes);
-            size -= bytes;      // read upto file size
+            long size = in.readLong();     // read file size
+            byte[] buffer = new byte[4 * 1024];
+            while (size > 0 && (bytes = in.read(buffer, 0, (int) Math.min(buffer.length, size))) != -1) {
+                fileOutputStream.write(buffer, 0, bytes);
+                size -= bytes;      // read upto file size
+            }
+            fileOutputStream.close();
+        } catch (IOException e) {
+            // an error occurred while receiving file delete
+            // call delete funcion
         }
-        fileOutputStream.close();
+
     }
 
     public String commandHandler(String command) {
