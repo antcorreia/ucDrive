@@ -18,7 +18,7 @@ public class Server{
 
         int serverHierarchy = Integer.parseInt(args[0]);
         FileAccess FA = new FileAccess();
-        ArrayList<String> config = FA.getconfig(serverHierarchy);
+        ArrayList<String> config = FA.getconfig(serverHierarchy); // delete parameter
         String serverAddress = config.get(0);
         int serverPort = Integer.parseInt(config.get(1));
         int HBPort = Integer.parseInt(config.get(2));
@@ -211,13 +211,10 @@ class HeartBeat extends Thread{
 
 class FileAccess {
 
-    Semaphore sem = new Semaphore(1);
-
-    public ArrayList<String> getUserInfo(String username) {
+    public synchronized ArrayList<String> getUserInfo(String username) {
 
         ArrayList<String> userinfo = new ArrayList<>();
         try {
-            sem.doWait();
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
@@ -236,16 +233,14 @@ class FileAccess {
             System.out.println("DEBUG: File not found.");
             e.printStackTrace();
         }
-        sem.doSignal();
         return userinfo;
     }
 
-    public  boolean changePassword(String username, String newPassword) {
+    public synchronized boolean changePassword(String username, String newPassword) {
         // ver se a password é valida?
         ArrayList<String> lines = new ArrayList<>();
         boolean changed = false;
         try {
-            sem.doWait();
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
@@ -272,15 +267,13 @@ class FileAccess {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        sem.doSignal();
         return changed;
     }
 
-    public boolean saveCurrentDir(String username,String currentDir){
+    public synchronized boolean saveCurrentDir(String username,String currentDir){
         ArrayList<String> lines = new ArrayList<>();
         boolean changed = false;
         try {
-            sem.doWait();
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
@@ -307,11 +300,11 @@ class FileAccess {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        sem.doSignal();
         return changed;
     }
 
-    public ArrayList<String> getconfig(int a){
+    public synchronized ArrayList<String> getconfig(int a){
+        // delete all this
         String s;
         if(a==1){
             s = "/home/config.txt";
@@ -342,32 +335,6 @@ class FileAccess {
         return config;
     }
 
-}
-
-class Semaphore {
-
-    int val;
-
-    public Semaphore(int val) {
-        this.val = val;
-    }
-
-    public synchronized void doSignal() {
-        val++;
-        notify();
-    }
-
-    public synchronized void doWait() {
-        while (val <= 0) {
-            try {
-                wait();
-            }
-            catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        val--;
-    }
 }
 
 class Connection extends Thread {
@@ -547,15 +514,18 @@ class Connection extends Thread {
             else if(command.startsWith("cd")){
                 if(command.equals("cd")){
                     currentDir = Username + "/home";
+                    fa.saveCurrentDir(Username,currentDir);
                     return "server /" + currentDir + " > ";
                 }
                 else{
                     String nextCommand = command.substring(2);
                     if(nextCommand.equals(" ..")){
                         if(currentDir.equals(Username + "/home")){
+                            fa.saveCurrentDir(Username,currentDir);
                             return "server /" + currentDir + " >";
                         }
                         currentDir = currentDir.substring(0,currentDir.lastIndexOf("/"));
+                        fa.saveCurrentDir(Username,currentDir);
                         return "server /" + currentDir + " > " ;
                     }
                     if(nextCommand.charAt(0) == ' '){
@@ -564,12 +534,14 @@ class Connection extends Thread {
                         File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + nextDir);
                         if (directory.exists()) {
                             currentDir = currentDir + "/" + nextDir;
+                            fa.saveCurrentDir(Username,currentDir);
                             return "server /" + currentDir + " > " ;
                         }
                         else
                             return "server - folder doesn't exist\nserver /"  + currentDir + " > ";
                     }
                 }
+
             }
 
             else if (command.startsWith("mkdir ")) {

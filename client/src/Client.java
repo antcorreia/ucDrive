@@ -8,51 +8,58 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class Client {
 
-    private static boolean reconnect = true;
+    private static int reconnect = 1;
 
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
 
-        String serverAddress;
-        int serverSocket;
+        while(true) {
 
-        ArrayList<String> connectionInfo = getConnectionInfo(sc);
-        serverAddress = connectionInfo.get(0);
-        serverSocket = Integer.parseInt(connectionInfo.get(1));
-
-        while(reconnect) {
-            // reconnection starts at false, if eventually is need turn true in specified region
-            reconnect = false;
-            // criar socket
-            try (Socket s = new Socket(serverAddress, serverSocket)) {
-                System.out.println("SOCKET=" + s);
-
-                DataInputStream in = new DataInputStream(s.getInputStream());
-                DataOutputStream out = new DataOutputStream(s.getOutputStream());
-                BlockingQueue<Boolean> queue = new LinkedBlockingQueue<>(1);
-
-                Receiver recv = new Receiver(in,queue);
-                Sender send = new Sender(out,queue,sc);
-
-                recv.start();
-                send.start();
-                recv.join();
-                send.join();
-
-                s.close();
-                in.close();
-                out.close();
-                System.out.println("server: exiting");
-
-            } catch (UnknownHostException e) {
-                System.out.println("Sock:" + e.getMessage());
-            } catch (EOFException e) {
-                System.out.println("EOF:" + e.getMessage());
+            if(reconnect==0){
                 break;
-            } catch (IOException e) {
-                System.out.println("IO:" + e.getMessage());
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            }
+            if(reconnect==2){
+                reconnect =1;
+            }
+
+            ArrayList<String> connectionInfo = getConnectionInfo(sc);
+            String serverAddress = connectionInfo.get(0);
+            int serverSocket = Integer.parseInt(connectionInfo.get(1));
+
+            while (reconnect==1) {
+                // reconnection starts at false, if eventually is need turn true in specified region
+                reconnect = 0;
+                // criar socket
+                try (Socket s = new Socket(serverAddress, serverSocket)) {
+                    System.out.println("ucdrive - connection information: " + s);
+                    DataInputStream in = new DataInputStream(s.getInputStream());
+                    DataOutputStream out = new DataOutputStream(s.getOutputStream());
+                    BlockingQueue<Integer> queue = new LinkedBlockingQueue<>(1);
+
+                    Receiver recv = new Receiver(in, queue);
+                    Sender send = new Sender(out, queue, sc);
+
+                    recv.start();
+                    send.start();
+                    recv.join();
+                    send.join();
+
+                    s.close();
+                    in.close();
+                    out.close();
+                    if(reconnect==1){
+                        System.out.println("ucdrive - reconnecting");
+                    }
+                    if(reconnect==2){
+                        System.out.println("ucdrive - connection lost, wait a few seconds before tryng to connect to backup server");
+                    }
+                    else{
+                        System.out.println("ucdrive - exiting");
+                    }
+
+                } catch (InterruptedException | IOException e) {
+                    System.out.println("ucdrive - something went wrong");
+                }
             }
         }
     }
@@ -60,9 +67,9 @@ public class Client {
     public static ArrayList<String> getConnectionInfo(Scanner sc) {
         ArrayList<String> info = new ArrayList<>();
 
-        System.out.print("Insert the Primary Server IP Address: ");
+        System.out.print("ucdrive - insert ip adress: ");
         info.add(sc.nextLine());
-        System.out.print("Insert the Primary Server Port: ");
+        System.out.print("ucdrive - insert comunication port: ");
         info.add(sc.nextLine());
 
 
@@ -76,11 +83,11 @@ public class Client {
 
     static class Sender extends Thread {
         private DataOutputStream out;
-        private BlockingQueue<Boolean> queue;
+        private BlockingQueue<Integer> queue;
         private Scanner sc;
         private String currentDir = "home";
 
-        public Sender(DataOutputStream out,BlockingQueue<Boolean> q,Scanner sc)  {
+        public Sender(DataOutputStream out,BlockingQueue<Integer> q,Scanner sc)  {
             this.queue = q;
             this.out = out;
             this.sc = sc;
@@ -103,7 +110,7 @@ public class Client {
                     }
 
                     this.out.writeUTF(line);
-                    if(toServerhandler(line,sc)) { // only way of stopping blocking scanner is to handle input
+                    if(toServerhandler(line,sc)==1) { // only way of stopping blocking scanner is to handle input
                         break;
                     }
                 }
@@ -113,8 +120,9 @@ public class Client {
 
         }
 
-        public boolean toServerhandler(String command,Scanner sc){
+        public int toServerhandler(String command,Scanner sc){
             try {
+
                 if (command.equals("rp")) { // easies way of stopping blocking scanner is using if clause
                     command = sc.nextLine(); // read new password
                     this.out.writeUTF(command); // send it
@@ -122,13 +130,22 @@ public class Client {
                     return queue.take();
                 }
                 else if (command.equals("exit")){
-                    return true;
+                    return 1;
+                }
+                else{
+                    if(!queue.isEmpty()){
+                        int a = queue.take();
+                        if(a ==2){
+                            reconnect = a;
+                        }
+                        return 1;
+                    }
                 }
 
             } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
             }
-            return false;
+            return 0;
         }
 
         public String localCommandHandler(String command) {
@@ -270,8 +287,8 @@ public class Client {
     static class Receiver extends Thread{
 
         private DataInputStream in;
-        BlockingQueue<Boolean> queue;
-        public Receiver(DataInputStream in,BlockingQueue<Boolean> q)  {
+        BlockingQueue<Integer> queue;
+        public Receiver(DataInputStream in,BlockingQueue<Integer> q)  {
             this.queue = q;
             this.in = in;
         }
@@ -289,10 +306,13 @@ public class Client {
                             System.out.print(fromServer);
                         }
                     }
-                } catch (EOFException e) {
-                System.out.println("EOF:" + e.getMessage());}
-                catch (IOException e) {
-                    e.printStackTrace();
+                } catch (IOException e) {
+                    try {
+                        queue.put(2);
+                    } catch (InterruptedException interruptedException) {
+                        interruptedException.printStackTrace();
+                    }
+                    break;
                 }
 
             }
@@ -319,9 +339,9 @@ public class Client {
          */
         public boolean fromServerHandler(String command){
             if (command.equals("/reconnect")){
-                reconnect = true;
+                reconnect = 1;
                 try {
-                    queue.put(true);
+                    queue.put(1);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
