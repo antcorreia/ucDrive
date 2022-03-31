@@ -673,39 +673,23 @@ class ConnectionUDP extends Thread {
     public void run() {
         if (serverHierarchy == 1) {
             //send
-
-            try {
-                DatagramSocket socket = new DatagramSocket(ourport);
-
-                while (true) {
-                    try {
-                        String type = fq.take();
-                        String path = fq.take();
-                        System.out.println("DEBUG: saving file: " + path + " on second server");
-                        sendFileUDP(socket, type, path);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+            while (true) {
+                try {
+                    String type = fq.take();
+                    String path = fq.take();
+                    System.out.println("DEBUG: saving file: " + path + " on second server");
+                    sendFileUDP(type, path);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-
-                //socket.close();
-            } catch (SocketException e) {
-                e.printStackTrace();
             }
-
         }
         else {
             //receive
             boolean run = true;
 
-            try {
-                DatagramSocket socket = new DatagramSocket(ourport);
-                while (run) {
-                    run = receiveFileUDP(socket);
-                }
-                socket.close();
-            } catch (SocketException e) {
-                e.printStackTrace();
+            while (run) {
+                run = receiveFileUDP();
             }
         }
     }
@@ -722,11 +706,13 @@ class ConnectionUDP extends Thread {
         return b;
     }
 
-    public void sendFileUDP(DatagramSocket socket, String fileType, String filePath) {
+    public void sendFileUDP(String fileType, String filePath) {
         System.out.println("Backup Started");
         String type_path = fileType + '_' + filePath;
 
         try {
+            DatagramSocket socket = new DatagramSocket(ourport);
+
             // Send Type and Path
             boolean checkTypePath;
             byte[] fileTypePathBytes = type_path.getBytes();
@@ -822,6 +808,8 @@ class ConnectionUDP extends Thread {
                     }
                 }
             }
+
+            socket.close();
         } catch (SocketException e) {
             System.out.println("Socket UDP S: " + e.getMessage());
         } catch (IOException e) {
@@ -829,14 +817,16 @@ class ConnectionUDP extends Thread {
         }
     }
 
-    public boolean receiveFileUDP(DatagramSocket socket) {
+    public boolean receiveFileUDP() {
         System.out.println("Backup Started");
 
         try {
+            DatagramSocket socket = new DatagramSocket(ourport);
+
+            // Receive Path
             byte[] data;
             DatagramPacket fileTypePathPacket;
             boolean dataFlag = false;
-            // Receive Path
             while (true) {
                 byte[] fileTypePathBytes = new byte[1024];
                 fileTypePathPacket = new DatagramPacket(fileTypePathBytes, fileTypePathBytes.length);
@@ -975,6 +965,8 @@ class ConnectionUDP extends Thread {
                     System.out.println("DEBUG: Directory already exists");
                 }
             }
+
+            socket.close();
         } catch (SocketException e) {
             System.out.println("Socket UDP R: " + e.getMessage());
         } catch (IOException e) {
