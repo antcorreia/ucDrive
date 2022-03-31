@@ -1,6 +1,12 @@
 import java.net.*;
 import java.io.*;
+import java.nio.file.Files;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.concurrent.BlockingQueue;
@@ -55,6 +61,16 @@ public class Server{
             ConnectionUDP backup = new ConnectionUDP(1,otherip,otherBUPort,BUPort,filequeue);
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
+            AdminConsole rmi = new AdminConsole();
+            try {
+                Registry r = LocateRegistry.createRegistry(7001);
+                r.rebind("admin", rmi);
+
+                System.out.println("DEGUB: RMI port enabled");
+            }
+            catch (RemoteException re) {
+                System.out.println("An error occurred while enabling RMI port: " + re);
+            }
             while(true) {
                 Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
                 System.out.println("DEBUG: Client connected, clientsocket = "+clientSocket);
@@ -974,5 +990,136 @@ class ConnectionUDP extends Thread {
         }
 
         return true;
+    }
+}
+
+class AdminConsole extends UnicastRemoteObject implements AdminInterface{
+    private static final long serialVersionUID = 1L;
+
+    public AdminConsole() throws RemoteException {
+        super();
+    }
+
+    public String registerClient(String BASE_DIR, String[] info){
+        ArrayList<String> lines = new ArrayList<>();
+
+        if (info.length > 3) return "Too many arguments";
+        else if (info.length < 3) return "Not enough arguments";
+        try {
+            Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/clients.txt"));
+            while (fileReader.hasNextLine()) {
+                String line = fileReader.nextLine();
+                lines.add(line);
+                String[] splitLine = line.split(" / ");
+
+                if (Objects.equals(splitLine[0], info[1]))
+                    return "Client already exists";
+            }
+            fileReader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
+            for (String s: lines) fileWriter.write(s + "\n");
+            fileWriter.write(String.format("%s / %s / %s/home\n", info[1], info[2], info[1]));
+            fileWriter.close();
+            if (!new File(BASE_DIR + "/home/" + info[1] + "/home").mkdirs())
+                System.out.println("DEBUG: Error creating client folder");
+        }
+        catch (Exception e){
+            e.printStackTrace();
+        }
+
+        return "New client registered";
+    }
+
+    public static void fileTree(File folder, int indent, StringBuilder string) throws IOException {
+        File[] files = Objects.requireNonNull(folder.listFiles());
+        int count = 0;
+
+        for (File file : files) {
+            count++;
+            if (file.isDirectory()) {
+                string.append(String.join("", Collections.nCopies(indent, "│  ")));
+                if (!Files.newDirectoryStream(file.toPath()).iterator().hasNext() && count == files.length)
+                    string.append("└──");
+                else
+                    string.append("├──");
+                string.append(file.getName()).append("/\n");
+                fileTree(file, indent + 1, string);
+            } else {
+                string.append(String.join("", Collections.nCopies(indent, "│  ")));
+                if (count != files.length)
+                    string.append("├──");
+                else
+                    string.append("└──");
+                string.append(file.getName()).append("\n");
+            }
+        }
+    }
+
+    public static String clientTree(String BASE_DIR, String[] info){
+        if (info.length > 2) return "Too many arguments";
+        else if (info.length < 2) return "Not enough arguments";
+
+        StringBuilder string = new StringBuilder(info[1] + "/\n");
+        try {
+            fileTree(new File(BASE_DIR + "/home/" + info[1] + "/"), 0, string);
+        }
+        catch (Exception e){
+            return "Client doesn't exist";
+        }
+        return string.toString();
+    }
+
+    public static String configServer(String BASE_DIR, String[] info){
+        if (info.length > 3) return "Too many arguments";
+        else if (info.length < 3) return "Not enough arguments";
+
+        try {
+            ArrayList<String> lines = new ArrayList<>();
+            Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/config.txt"));
+
+            while (fileReader.hasNextLine()){
+                String line = fileReader.nextLine();
+
+                String[] splitServerLine = line.split(": ");
+                if (Objects.equals(splitServerLine[0], "DELAY"))
+                    lines.add("DELAY: " + info[1]);
+                else if (Objects.equals(splitServerLine[0], "MAX FAILED"))
+                    lines.add("MAX FAILED: " + info[2]);
+                else
+                    lines.add(line);
+            }
+            fileReader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/config.txt");
+            for (String s: lines) fileWriter.write(s + "\n");
+            fileWriter.close();
+        }
+        catch (FileNotFoundException e){
+            return "Configuration files not found";
+        } catch (Exception e) {
+            return "Error while writing to file";
+        }
+
+        return "Configuration file successfully edited";
+    }
+
+
+    public String adminCommandHandler(String command){
+        String[] info = command.split(" ");
+        String BASE_DIR = System.getProperty("user.dir");
+
+        switch(info[0]){
+            case "reg":
+                return registerClient(BASE_DIR, info);
+
+            case "tree":
+                return clientTree(BASE_DIR, info);
+
+            case "config":
+                return configServer(BASE_DIR, info);
+        }
+
+        return "Invalid command";
     }
 }
