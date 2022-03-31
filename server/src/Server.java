@@ -14,9 +14,17 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class Server{
 
+    /**
+     * main funtion where connection to clients are made
+     * get all configuration from config.txt using getconfig
+     * all servers start at default 'second server' where its determined if they are meant to be kept like that or start
+     * as main server. start hearbeat, backup, rmi, client listening
+     * @param args
+     */
     public static void main(String[] args){
         Scanner sc = new Scanner(System.in);
 
+        // delete this
         if(args.length!=1){
             System.out.println("USAGE: java server hierachy ( where hierachy is 1 or 2 )");
             return;
@@ -68,7 +76,7 @@ public class Server{
                 System.out.println("DEGUB: RMI port enabled");
             }
             catch (RemoteException re) {
-                System.out.println("An error occurred while enabling RMI port: " + re);
+                System.out.println("DEBUG: an error occurred while enabling RMI port: " + re);
             }
             while(true) {
                 Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
@@ -111,6 +119,9 @@ class HeartBeat extends Thread{
         }
     }
 
+    /**
+     * this functin is executed by primary server, resends what it recevies
+     */
     public void ackping(){
 
         while (true) {
@@ -127,6 +138,9 @@ class HeartBeat extends Thread{
 
     }
 
+    /**
+     * runner will start either ack, or threads to send and receive depending if server is main or second
+     */
     public void run(){
         if(primary) {
             ackping();
@@ -148,6 +162,9 @@ class HeartBeat extends Thread{
 
     }
 
+    /**
+     * class to receive pings
+     */
     public static class PingRecv extends Thread{
 
         private DatagramPacket request;
@@ -162,6 +179,14 @@ class HeartBeat extends Thread{
             max = m;
         }
 
+        /**
+         * runner will have a socket oponed for as long has the max number of pings to become main is set.
+         * After this delay will see if the counter is at 0, if it is it breaks loop. if it receives ack
+         * it resets counter.
+         * because default is secondary server, there will be two scenarios, either the server pings n times and the other
+         * doest respond and it becomes main, or they are started at the same time, to determine wich server should become
+         * main the one with the higher hierachy wins
+         */
         public void run(){
 
             while(true){
@@ -191,6 +216,9 @@ class HeartBeat extends Thread{
 
     }
 
+    /**
+     * class that sends pings
+     */
     public static class PingSend extends Thread{
 
         private DatagramPacket reply;
@@ -203,6 +231,9 @@ class HeartBeat extends Thread{
             reply = r;
         }
 
+        /**
+         * runner sends pings delay by some time, and decrements counter
+         */
         public void run(){
 
             while(true){
@@ -231,6 +262,11 @@ class HeartBeat extends Thread{
 
 class FileAccess {
 
+    /**
+     * get user information from clients.txt
+     * @param username username of client
+     * @return arrayslist of string will all info
+     */
     public synchronized ArrayList<String> getUserInfo(String username) {
 
         ArrayList<String> userinfo = new ArrayList<>();
@@ -256,6 +292,12 @@ class FileAccess {
         return userinfo;
     }
 
+    /**
+     * changes users password
+     * @param username users username
+     * @param newPassword new password
+     * @return true if change was succefull
+     */
     public synchronized boolean changePassword(String username, String newPassword) {
         // ver se a password é valida?
         ArrayList<String> lines = new ArrayList<>();
@@ -290,6 +332,12 @@ class FileAccess {
         return changed;
     }
 
+    /**
+     * save users current directory
+     * @param username username of client
+     * @param currentDir directory
+     * @return true if it was succefull
+     */
     public synchronized boolean saveCurrentDir(String username,String currentDir){
         ArrayList<String> lines = new ArrayList<>();
         boolean changed = false;
@@ -323,6 +371,11 @@ class FileAccess {
         return changed;
     }
 
+    /**
+     * get server configuration ip, port etc
+     * @param a delete this
+     * @return arraylist will all information
+     */
     public synchronized ArrayList<String> getconfig(int a){
         // delete all this
         String s;
@@ -377,6 +430,10 @@ class Connection extends Thread {
         }catch(IOException e){System.out.println("DEBUG: Connection: " + e.getMessage());}
     }
 
+    /**
+     * runner will be stuck at login until it is confirmed, then enters loop where all commands are handled.
+     * exit or reconnect will break loop
+     */
     public void run(){
         try {
             login();
@@ -410,6 +467,9 @@ class Connection extends Thread {
         }
     }
 
+    /**
+     * retriveis users username and password, stuck in here until it succedes
+     */
     public void login(){
 
         try{
@@ -457,6 +517,10 @@ class Connection extends Thread {
         }
     }
 
+    /**
+     * new password handler
+     * @return true if all went right
+     */
     public boolean newPasswordRequest() {
         try {
             out.writeUTF("server - new password: ");
@@ -471,6 +535,11 @@ class Connection extends Thread {
         return false;
     }
 
+    /**
+     * send file to client
+     * @param path path where file is
+     * @throws Exception
+     */
     public void sendFile(String path) throws Exception{
         int bytes = 0;
         File file = new File(path);
@@ -487,6 +556,10 @@ class Connection extends Thread {
         fileInputStream.close();
     }
 
+    /**
+     * receives file from client
+     * @param fileName
+     */
     private void receiveFile(String fileName){
         try {
             int bytes = 0;
@@ -506,6 +579,11 @@ class Connection extends Thread {
 
     }
 
+    /**
+     * handles all comands received from client
+     * @param command
+     * @return
+     */
     public String commandHandler(String command) {
         try {
 

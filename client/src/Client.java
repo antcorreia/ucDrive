@@ -8,17 +8,23 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class Client {
 
-    private static int reconnect = 1;
+    private static int reconnect = 1; // 0 dont reconnect, 1 reconnect, 2 connection lost
 
+    /**
+     * main
+     * it will run until exit command is preformed
+     * variable reconnect will determine operations
+     * @param args not used
+     */
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
 
         while(true) {
 
-            if(reconnect==0){
+            if(reconnect==0){ // exit server
                 break;
             }
-            if(reconnect==2){
+            if(reconnect==2){ // conection was lost
                 reconnect =1;
             }
 
@@ -27,7 +33,7 @@ public class Client {
             int serverSocket = Integer.parseInt(connectionInfo.get(1));
 
             while (reconnect==1) {
-                // reconnection starts at false, if eventually is need turn true in specified region
+                // reconnection starts at 0, if eventually is need turn 1 in specified region
                 reconnect = 0;
                 // criar socket
                 try (Socket s = new Socket(serverAddress, serverSocket)) {
@@ -65,6 +71,11 @@ public class Client {
         }
     }
 
+    /**
+     * used to scan input for server ip and port
+     * @param sc scanner, received in paramenter because is scanner is not thread safe
+     * @return arrayslist with ip and port
+     */
     public static ArrayList<String> getConnectionInfo(Scanner sc) {
         ArrayList<String> info = new ArrayList<>();
 
@@ -73,15 +84,12 @@ public class Client {
         System.out.print("ucdrive - insert comunication port: ");
         info.add(sc.nextLine());
 
-
-        /*System.out.print("Insert the Secondary Server IP Address: ");
-        info.add(sc.nextLine());
-        System.out.print("Insert the Secondary Server Port: ");
-        info.add(sc.nextLine());*/
-
         return info;
     }
 
+    /**
+     * sender class thread, sends all user input
+     */
     static class Sender extends Thread {
         private DataOutputStream out;
         private BlockingQueue<Integer> queue;
@@ -94,6 +102,13 @@ public class Client {
             this.sc = sc;
         }
 
+        /**
+         * running thread, scans input and handles it
+         * if 'local' is used all commands are no sented, with the expection of 'server' to reconnect and 'exit' to exit
+         * if leaving local, queue has someting, it means the receiver thread sended someting, in this case it means
+         * the connection to server was lost, reconnect it set to 2. if not command is sent. Because the comands
+         * to reset password and exit the thread must be closed, this inputs are handled in 'toserverhabndler'
+         */
         public void run(){
 
             try  {
@@ -134,6 +149,12 @@ public class Client {
 
         }
 
+        /**
+         * handle client input to determine if command is to exit thread
+         * @param command command sent to server
+         * @param sc scanner
+         * @return 1 to close thread, 0 no action needed
+         */
         public int toServerhandler(String command,Scanner sc){
             try {
                 if (command.equals("rp")) { // easies way of stopping blocking scanner is using if clause
@@ -151,6 +172,11 @@ public class Client {
             return 0;
         }
 
+        /**
+         * when in local mode, all commands are handled by this function
+         * @param command command read
+         * @return string to print
+         */
         public String localCommandHandler(String command) {
             try {
                 if(command.equals("help")){
@@ -276,6 +302,11 @@ public class Client {
             return "invalid command\nlocal /" + currentDir + " > ";
         }
 
+        /**
+         * funtion used to upload files
+         * @param path path where file is
+         * @throws Exception
+         */
         public void sendFile(String path) throws Exception{
             int bytes = 0;
             File file = new File(path);
@@ -293,6 +324,9 @@ public class Client {
         }
     }
 
+    /**
+     * receiver class thread, receives all input from server
+     */
     static class Receiver extends Thread{
 
         private DataInputStream in;
@@ -302,6 +336,10 @@ public class Client {
             this.in = in;
         }
 
+        /**
+         * runner will loop in while true, commands to execute by server come with '/' at the start, else is just
+         * a print. commands from server are handled in 'fromserverHandler' is true for exit or reconnect
+         */
         public void run(){
 
             while (true) {
@@ -328,6 +366,10 @@ public class Client {
 
         }
 
+        /**
+         * file downlaods are made here
+         * @param fileName path where file and file is stored
+         */
         private void receiveFile(String fileName){
             try {
                 int bytes = 0;
@@ -361,6 +403,7 @@ public class Client {
                 }
                 return true;
             }
+
             else if (command.equals("/exit")){
                 return true;
             }
