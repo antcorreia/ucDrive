@@ -59,6 +59,7 @@ public class Client {
 
                 } catch (InterruptedException | IOException e) {
                     System.out.println("ucdrive - something went wrong");
+                    reconnect = 1;
                 }
             }
         }
