@@ -59,7 +59,7 @@ public class Client {
 
                 } catch (InterruptedException | IOException e) {
                     System.out.println("ucdrive - something went wrong");
-                    reconnect = 1;
+                    reconnect = 2;
                 }
             }
         }
@@ -102,12 +102,15 @@ public class Client {
 
                     if (line.equals("local")) {
                         System.out.print("local /" + currentDir + " > ");
-                        do {
+                        while(true){
                             line = sc.nextLine();
+                            String res = localCommandHandler(line);
+                            if(res.equals("")){
+                                break;
+                            }
+                            System.out.print(res);
 
-                            System.out.print(localCommandHandler(line));
-
-                        } while (!(line.equals("server") || line.equals("exit")));
+                        }
                     }
 
                     this.out.writeUTF(line);
@@ -247,6 +250,12 @@ public class Client {
                 }
 
                 else if(command.startsWith("upload ")){
+
+                    if(!queue.isEmpty()){
+                        // the only way for queue to be full on local is if connection was lost
+                        return "";
+                    }
+
                     String[] info = command.split(" ");
                     String BASE_DIR = System.getProperty("user.dir");
                     File directory = new File(BASE_DIR + "/" + currentDir + "/" + info[1]);
