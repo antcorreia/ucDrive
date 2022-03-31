@@ -9,6 +9,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class Client {
 
     private static int reconnect = 1; // 0 dont reconnect, 1 reconnect, 2 connection lost
+    private static String serverAddress; // here for use in receive file to know ip
 
     /**
      * main
@@ -17,6 +18,8 @@ public class Client {
      * @param args not used
      */
     public static void main(String[] args) {
+
+
         Scanner sc = new Scanner(System.in);
 
         while(true) {
@@ -29,7 +32,7 @@ public class Client {
             }
 
             ArrayList<String> connectionInfo = getConnectionInfo(sc);
-            String serverAddress = connectionInfo.get(0);
+            serverAddress = connectionInfo.get(0);
             int serverSocket = Integer.parseInt(connectionInfo.get(1));
 
             while (reconnect==1) {
@@ -288,10 +291,11 @@ public class Client {
                         return "local: file does not exist" +
                                 "\nlocal /" + currentDir + " > ";
                     }
-                    out.writeUTF("upload "+info[2]+info[1]);
+                    ServerSocket s = new ServerSocket(0); // get available port
+                    out.writeUTF("upload "+info[2]+info[1]+ " " + s.getLocalPort());
 
                     String filepath = BASE_DIR + "/" + currentDir +"/"+ info[1];
-                    sendFile(filepath);
+                    sendFile(filepath,s);
                     return "local: upload complete\nlocal /" + currentDir + " > ";
                 }
 
@@ -307,7 +311,11 @@ public class Client {
          * @param path path where file is
          * @throws Exception
          */
-        public void sendFile(String path) throws Exception{
+        public void sendFile(String path, ServerSocket s) throws Exception{
+            Socket cs = s.accept(); // BLOQUEANTE waiting for server
+            DataInputStream in = new DataInputStream(cs.getInputStream());
+            DataOutputStream out = new DataOutputStream(cs.getOutputStream());
+
             int bytes = 0;
             File file = new File(path);
             FileInputStream fileInputStream = new FileInputStream(file);
@@ -321,6 +329,8 @@ public class Client {
                 out.flush();
             }
             fileInputStream.close();
+            cs.close();
+            s.close();
         }
     }
 
@@ -370,8 +380,11 @@ public class Client {
          * file downlaods are made here
          * @param fileName path where file and file is stored
          */
-        private void receiveFile(String fileName){
+        private void receiveFile(String fileName, int port){
             try {
+                Socket s = new Socket(serverAddress, port);
+
+                DataInputStream in = new DataInputStream(s.getInputStream());
                 int bytes = 0;
                 FileOutputStream fileOutputStream = new FileOutputStream(fileName);
 
@@ -382,6 +395,7 @@ public class Client {
                     size -= bytes;      // read upto file size
                 }
                 fileOutputStream.close();
+                s.close();
             } catch (IOException e) {
                 // an error on download server crached
                 // call delete function
@@ -416,13 +430,13 @@ public class Client {
                     File directory = new File(BASE_DIR + dir);
                     if (!directory.exists()) {
                         if (directory.mkdirs()) {
-                            receiveFile(BASE_DIR + info[1]);
+                            receiveFile(BASE_DIR + info[1],Integer.parseInt(info[2]));
                         } else {
                             System.out.println("local: an error ocurred while creating folder");
                         }
                     }
                     else {
-                        receiveFile(BASE_DIR + info[1]);
+                        receiveFile(BASE_DIR + info[1],Integer.parseInt(info[2]));
                     }
                 } catch (Exception e) {
                     e.printStackTrace();

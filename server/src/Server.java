@@ -195,7 +195,6 @@ class HeartBeat extends Thread{
                     hb_cont = hb_default;
                     socket.receive(request);
                     int r = Integer.parseInt(new String(request.getData(), 0, request.getLength()));
-                    System.out.println(r);
                     if(r < Integer.parseInt(message)){ // 2 < 1
                         break;
                     }
@@ -540,7 +539,12 @@ class Connection extends Thread {
      * @param path path where file is
      * @throws Exception
      */
-    public void sendFile(String path) throws Exception{
+    public void sendFile(String path, ServerSocket s) throws Exception{
+        Socket cs = s.accept(); // BLOQUEANTE waiting for client
+        System.out.println("DEBUG: connected file transfer socket: " + s);
+        DataInputStream in = new DataInputStream(cs.getInputStream());
+        DataOutputStream out = new DataOutputStream(cs.getOutputStream());
+
         int bytes = 0;
         File file = new File(path);
         FileInputStream fileInputStream = new FileInputStream(file);
@@ -554,14 +558,21 @@ class Connection extends Thread {
             out.flush();
         }
         fileInputStream.close();
+        cs.close();
+        s.close();
     }
 
     /**
      * receives file from client
      * @param fileName
      */
-    private void receiveFile(String fileName){
+    private void receiveFile(String fileName, int port){
         try {
+            Socket s = new Socket(clientSocket.getInetAddress(), port);
+            System.out.println("DEBUG: connected file transfer socket: " + s);
+
+            DataInputStream in = new DataInputStream(s.getInputStream());
+
             int bytes = 0;
             FileOutputStream fileOutputStream = new FileOutputStream(fileName);
 
@@ -572,6 +583,7 @@ class Connection extends Thread {
                 size -= bytes;      // read upto file size
             }
             fileOutputStream.close();
+            s.close();
         } catch (IOException e) {
             // an error occurred while receiving file delete
             // call delete funcion
@@ -713,10 +725,11 @@ class Connection extends Thread {
                     return "server: file does not exist" +
                             "\nserver /" + currentDir + " > ";
                 }
-                out.writeUTF("/file_download "+info[2]+info[1]);
+                ServerSocket s = new ServerSocket(0); // get available port
+                out.writeUTF("/file_download "+info[2]+info[1]+ " " + s.getLocalPort());
 
                 String filepath = BASE_DIR + "/home/" + currentDir +"/"+ info[1];
-                sendFile(filepath);
+                sendFile(filepath,s);
                 return "server: download complete\nserver /" + currentDir + " > ";
             }
 
@@ -727,12 +740,12 @@ class Connection extends Thread {
                 File directory = new File(BASE_DIR +"/home/"+ Username + dir);
                 if (!directory.exists()) {
                     if (directory.mkdirs()) {
-                        receiveFile(BASE_DIR +"/home/"+ Username + info[1]);
+                        receiveFile(BASE_DIR +"/home/"+ Username + info[1], Integer.parseInt(info[2]));
                     } else {
                         System.out.println("DEBUG: an error ocurred while creating folder");
                     }
                 } else {
-                    receiveFile(BASE_DIR +"/home/"+ Username + "/" + info[1]);
+                    receiveFile(BASE_DIR +"/home/"+ Username + info[1], Integer.parseInt(info[2]));
                 }
                 String aux = "/home/"+ Username + info[1];
                 System.out.println("DEBUG: placing - " + aux +" in queue");
@@ -943,6 +956,7 @@ class ConnectionUDP extends Thread {
                     } catch (SocketTimeoutException e) {
                         if (!HB.isAlive()) {
                             System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
+                            socket.close();
                             return false;
                         }
                     }
@@ -999,6 +1013,7 @@ class ConnectionUDP extends Thread {
                         } catch (SocketTimeoutException e) {
                             if (!HB.isAlive()) {
                                 System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
+                                socket.close();
                                 return false;
                             }
                         }
