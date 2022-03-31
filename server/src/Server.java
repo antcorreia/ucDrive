@@ -1031,7 +1031,7 @@ class AdminConsole extends UnicastRemoteObject implements AdminInterface{
         return "New client registered";
     }
 
-    public static void fileTree(File folder, int indent, StringBuilder string) throws IOException {
+    private static void fileTree(File folder, int indent, StringBuilder string) throws IOException {
         File[] files = Objects.requireNonNull(folder.listFiles());
         int count = 0;
 
@@ -1065,7 +1065,7 @@ class AdminConsole extends UnicastRemoteObject implements AdminInterface{
             fileTree(new File(BASE_DIR + "/home/" + info[1] + "/"), 0, string);
         }
         catch (Exception e){
-            return "Client doesn't exist";
+            return "Client " + info[1] + " doesn't exist";
         }
         return string.toString();
     }
@@ -1104,22 +1104,47 @@ class AdminConsole extends UnicastRemoteObject implements AdminInterface{
         return "Configuration file successfully edited";
     }
 
+    private static long getFolderSize(File folder) throws NullPointerException{
+        long length = 0;
+
+        File[] files = folder.listFiles();
+
+        for (File file : files)
+            if (file.isFile())
+                length += file.length();
+            else
+                length += getFolderSize(file);
+
+        return length;
+    }
+
+    public String clientStorage(String BASE_DIR, String[] info){
+        if (info.length > 2) return "Too many arguments";
+        else if (info.length < 2) return "Not enough arguments";
+
+        if (info[1].equals("total"))
+            return "Total space occupied is: " + getFolderSize(new File(BASE_DIR + "/home/")) + " bytes";
+        else
+            try {
+                return "Client " + info[1] + " is occupying " + getFolderSize(new File(BASE_DIR + "/home/" + info[1])) + " bytes";
+            }
+            catch (NullPointerException e){
+                return "Client " + info[1] + " doesn't exist";
+            }
+    }
+
 
     public String adminCommandHandler(String command){
         String[] info = command.split(" ");
         String BASE_DIR = System.getProperty("user.dir");
 
-        switch(info[0]){
-            case "reg":
-                return registerClient(BASE_DIR, info);
+        return switch (info[0]) {
+            case "reg" -> registerClient(BASE_DIR, info);
+            case "tree" -> clientTree(BASE_DIR, info);
+            case "config" -> configServer(BASE_DIR, info);
+            case "storage" -> clientStorage(BASE_DIR, info);
+            default -> "Invalid command";
+        };
 
-            case "tree":
-                return clientTree(BASE_DIR, info);
-
-            case "config":
-                return configServer(BASE_DIR, info);
-        }
-
-        return "Invalid command";
     }
 }
