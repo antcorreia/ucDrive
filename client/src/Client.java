@@ -113,6 +113,14 @@ public class Client {
                         }
                     }
 
+                    if(!queue.isEmpty()){ // only way for queue is not empty is if it crashed
+                        int a = queue.take();
+                        if(a == 2){ // verify anyway ...
+                            reconnect = a;
+                            break;
+                        }
+                    }
+
                     this.out.writeUTF(line);
                     if(toServerhandler(line,sc)==1) { // only way of stopping blocking scanner is to handle input
                         break;
@@ -120,32 +128,23 @@ public class Client {
                 }
             } catch (IOException e) {
                 e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
 
         }
 
         public int toServerhandler(String command,Scanner sc){
             try {
-
                 if (command.equals("rp")) { // easies way of stopping blocking scanner is using if clause
                     command = sc.nextLine(); // read new password
                     this.out.writeUTF(command); // send it
-                    // an error as ocurred
+                    // an error as ocurred ?
                     return queue.take();
                 }
                 else if (command.equals("exit")){
                     return 1;
                 }
-                else{
-                    if(!queue.isEmpty()){
-                        int a = queue.take();
-                        if(a ==2){
-                            reconnect = a;
-                        }
-                        return 1;
-                    }
-                }
-
             } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
             }
