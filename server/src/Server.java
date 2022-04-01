@@ -551,6 +551,87 @@ class FileAccess {
                 return "Client " + info[1] + " doesn't exist";
             }
     }
+    
+    public boolean fileExists(String filePath, String address, int port, int ourport, HeartBeat HB){
+        int fExists = 0;
+        try {
+            DatagramSocket socket = new DatagramSocket(ourport);
+
+            // Send Path
+            boolean checkPath;
+            byte[] filePathBytes = filePath.getBytes();
+            byte[] fileP = new byte[filePathBytes.length + 1];
+            fileP[0] = (byte) (1);
+            System.arraycopy(filePathBytes, 0, fileP, 1, filePathBytes.length);
+            DatagramPacket filePathPacket = new DatagramPacket(fileP, fileP.length, InetAddress.getByName(address), port);
+            socket.send(filePathPacket);
+            System.out.printf("DEBUG: Sent: path %s\n", new String(fileP, 1, fileP.length - 1));
+            // Know if the path was received correctly
+            while (true) {
+                byte[] check = new byte[1];
+                DatagramPacket checkPacket = new DatagramPacket(check, check.length);
+
+                try {
+                    socket.setSoTimeout(500);
+                    socket.receive(checkPacket);
+                    checkPath = true;
+                } catch (SocketTimeoutException e) {
+                    System.out.println("DEBUG: Socket timed out waiting for acknowledgement");
+                    checkPath = false;
+                }
+
+                if ((check[0] == fileP[0]) && (checkPath)) {
+                    System.out.println("DEBUG: Acknowledgement received: sequence number = " + check[0]);
+                    break;
+                } else {
+                    socket.send(filePathPacket);
+                    System.out.println("DEBUG: Resending: sequence number = " + check[0]);
+                }
+            }
+
+            // Receive if file exists or not
+            byte[] data = new byte[1];
+            DatagramPacket existsPacket;
+            boolean dataFlag = false;
+            while (true) {
+                existsPacket = new DatagramPacket(data, data.length);
+
+                while (true) {
+                    try {
+                        socket.setSoTimeout(HB.delay*2);
+                        socket.receive(existsPacket);
+                        break;
+                    } catch (SocketTimeoutException e) {
+                        if (!HB.isAlive()) {
+                            System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
+                            socket.close();
+                            return false;
+                        }
+                    }
+                }
+                fExists = data[0];
+
+                // Send confirmation
+                byte[] checkExist = new byte[1];
+                checkExist[0] = data[0];
+                DatagramPacket ackExistsPacket = new DatagramPacket(checkExist, checkExist.length, InetAddress.getByName(address), port);
+                socket.send(ackExistsPacket);
+                System.out.println("DEBUG: Sent type/path acknowledgement: sequence number = " + checkExist[0]);
+
+                if (checkExist[0] == (byte) (1) || checkExist[0] == (byte) (0))
+                    dataFlag = true;
+
+                if (dataFlag) {
+                    break;
+                }
+            }            
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return fExists == 1;
+    }
 }
 
 class Connection extends Thread {
@@ -1036,8 +1117,8 @@ class ConnectionUDP extends Thread {
             byte[] fileTP = new byte[fileTypePathBytes.length + 1];
             fileTP[0] = (byte) (1);
             System.arraycopy(fileTypePathBytes, 0, fileTP, 1, fileTypePathBytes.length);
-            DatagramPacket filePathPacket = new DatagramPacket(fileTP, fileTP.length, InetAddress.getByName(address), port);
-            socket.send(filePathPacket);
+            DatagramPacket fileTypePathPacket = new DatagramPacket(fileTP, fileTP.length, InetAddress.getByName(address), port);
+            socket.send(fileTypePathPacket);
             System.out.printf("DEBUG: Sent: path %s\n", new String(fileTP, 1, fileTP.length - 1));
             // Know if the path was received correctly
             while (true) {
@@ -1058,7 +1139,7 @@ class ConnectionUDP extends Thread {
                     break;
                 }
                 else {
-                    socket.send(filePathPacket);
+                    socket.send(fileTypePathPacket);
                     System.out.println("DEBUG: Resending: sequence number = " + check[0]);
                 }
             }
@@ -1170,9 +1251,9 @@ class ConnectionUDP extends Thread {
                 // Send confirmation
                 byte[] checkTypePath = new byte[1];
                 checkTypePath[0] = data[0];
-                DatagramPacket ackPathPacket = new DatagramPacket(checkTypePath, checkTypePath.length, InetAddress.getByName(address), port);
-                socket.send(ackPathPacket);
-                System.out.println("DEBUG: Sent path acknowledgement: sequence number = " + checkTypePath[0]);
+                DatagramPacket ackTypePathPacket = new DatagramPacket(checkTypePath, checkTypePath.length, InetAddress.getByName(address), port);
+                socket.send(ackTypePathPacket);
+                System.out.println("DEBUG: Sent type/path acknowledgement: sequence number = " + checkTypePath[0]);
 
                 if (checkTypePath[0] == (byte) (1))
                     dataFlag = true;
@@ -1296,6 +1377,135 @@ class AdminConsole extends UnicastRemoteObject implements AdminInterface{
             case "storage" -> fa.clientStorage(BASE_DIR, info);
             default -> "Invalid command";
         };
+    }
+}
 
+class IntegrityUDP extends Thread {
+    private String address;
+    private int port;
+    private int ourport;
+    private HeartBeat HB;
+
+    public IntegrityUDP(String address, int port, int otherport) {
+        this.address = address;
+        this.port = port;
+        this.ourport = otherport;
+    }
+
+    public IntegrityUDP(String address, int port, int otherport, HeartBeat hb) {
+        this.address = address;
+        this.port = port;
+        this.ourport = otherport;
+        this.HB = hb;
+    }
+
+    /**
+     * runner keeps the function to check integrity running
+     */
+    public void run() {
+        //receive
+        boolean run = true;
+
+        System.out.println("DEBUG: Opening Integrity Check");
+        while (run) {
+            run = checkIntegrity();
+        }
+        System.out.println("DEBUG: Closing Integrity Check");
+    }
+
+    /**
+     * receives a path over UDP to check if it exists in secondary server
+     * @return meant to be true until heartbeat is dead and server needs to become primary
+     */
+    public boolean checkIntegrity() {
+        try {
+            DatagramSocket socket = new DatagramSocket(ourport);
+
+            // Receive Path
+            byte[] data;
+            DatagramPacket filePathPacket;
+            boolean dataFlag = false;
+            while (true) {
+                byte[] filePathBytes = new byte[1024];
+                filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length);
+
+                while (true) {
+                    try {
+                        socket.setSoTimeout(HB.delay*2);
+                        socket.receive(filePathPacket);
+                        break;
+                    } catch (SocketTimeoutException e) {
+                        if (!HB.isAlive()) {
+                            System.out.println("DEBUG: Closing Integrity Check, HeartBeat has terminated");
+                            socket.close();
+                            return false;
+                        }
+                    }
+                }
+
+                data = filePathPacket.getData();
+
+                // Send confirmation
+                byte[] checkPath = new byte[1];
+                checkPath[0] = data[0];
+                DatagramPacket ackPathPacket = new DatagramPacket(checkPath, checkPath.length, InetAddress.getByName(address), port);
+                socket.send(ackPathPacket);
+                System.out.println("DEBUG: Sent path acknowledgement: sequence number = " + checkPath[0]);
+
+                if (checkPath[0] == (byte) (1))
+                    dataFlag = true;
+
+                if (dataFlag) {
+                    break;
+                }
+            }
+
+
+            String filePath = new String(data, 1, filePathPacket.getLength());
+            System.out.println("DEBUG: Path received: " + filePath);
+
+            // Send if path exists or not
+            boolean confirmationReceived;
+            byte[] fileExists = new byte[1];
+            File f = new File(filePath);
+            if (f.exists()) {
+                fileExists[0] = (byte) (1);
+            }
+
+            DatagramPacket fileExistsPacket = new DatagramPacket(fileExists, fileExists.length, InetAddress.getByName(address), port);
+            socket.send(fileExistsPacket);
+            System.out.println("DEBUG: Sent: file exist value = " + fileExists[0]);
+            // Know if file exist value was received correctly
+            while (true) {
+                byte[] check = new byte[1];
+                DatagramPacket checkPacket = new DatagramPacket(check, check.length);
+
+                try {
+                    socket.setSoTimeout(500);
+                    socket.receive(checkPacket);
+                    confirmationReceived = true;
+                } catch (SocketTimeoutException e) {
+                    System.out.println("DEBUG: Socket timed out waiting for acknowledgement");
+                    confirmationReceived = false;
+                }
+
+                if ((check[0] == fileExists[0]) && (confirmationReceived)) {
+                    System.out.println("DEBUG: Acknowledgement received: sequence number = " + check[0]);
+                    break;
+                }
+                else {
+                    socket.send(fileExistsPacket);
+                    System.out.println("DEBUG: Resending: sequence number = " + check[0]);
+                }
+            }
+
+            socket.close();
+        } catch (SocketException e) {
+            System.out.println("DEBUG: Socket UDP Receiver: " + e.getMessage());
+        } catch (IOException e) {
+            System.out.println("IO: " + e.getMessage());
+        }
+
+        return true;
     }
 }
