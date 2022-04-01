@@ -41,15 +41,20 @@ public class Server{
         int HBdelay = Integer.parseInt(config.get(7));
         int HBmax = Integer.parseInt(config.get(8));
         String serverHierachy = config.get(9);
+        int IPort = Integer.parseInt(config.get(9));
+        int IOtherPort = Integer.parseInt(config.get(10));
 
 
         try {
         HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
         ConnectionUDP backup = new ConnectionUDP(2,otherip,otherBUPort,BUPort,HB,FA);
+        IntegrityUDP integrity = new IntegrityUDP(otherip,IOtherPort,IPort,HB);
         HB.start();
         backup.start();
+        integrity.start();
         HB.join();
         backup.join();
+        integrity.join();
         } catch (InterruptedException | UnknownHostException e) {
             e.printStackTrace();
         }
@@ -1386,11 +1391,6 @@ class IntegrityUDP extends Thread {
     private int ourport;
     private HeartBeat HB;
 
-    public IntegrityUDP(String address, int port, int otherport) {
-        this.address = address;
-        this.port = port;
-        this.ourport = otherport;
-    }
 
     public IntegrityUDP(String address, int port, int otherport, HeartBeat hb) {
         this.address = address;
