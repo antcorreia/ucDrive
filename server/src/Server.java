@@ -67,7 +67,7 @@ public class Server{
             listenSocket.bind(sockaddr);
 
             BlockingQueue<String> filequeue = new LinkedBlockingQueue<>();
-            HeartBeat HB = new HeartBeat(true,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
+            HeartBeat HB = new HeartBeat(true,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,"1");
             HB.start();
             ConnectionUDP backup = new ConnectionUDP(1,otherip,otherBUPort,BUPort,filequeue,FA);
             backup.start();
@@ -113,7 +113,8 @@ class HeartBeat extends Thread{
             message = m;
             buffer = message.getBytes();
             reply = new DatagramPacket(buffer, buffer.length, otherip, otherport);
-            request = new DatagramPacket(buffer, buffer.length);
+            byte[] b = new byte[1];
+            request = new DatagramPacket(b, b.length);
             primary = hierarchy;
             hb_cont = cont;
             hb_default = hb_cont;
@@ -199,7 +200,7 @@ class HeartBeat extends Thread{
                     hb_cont = hb_default;
                     socket.receive(request);
                     int r = Integer.parseInt(new String(request.getData(), 0, request.getLength()));
-                    if(r < Integer.parseInt(message)){ // 2 < 1
+                    if(r > Integer.parseInt(message)){ // 2 < 1
                         break;
                     }
                     if(hb_cont<0){
@@ -1334,7 +1335,7 @@ class ConnectionUDP extends Thread {
             }
 
 
-            String fileTypePath = new String(data, 1, fileTypePathPacket.getLength());
+            String fileTypePath = new String(data, 1, fileTypePathPacket.getLength()-1);
             System.out.println("DEBUG: Type and Path received: " + fileTypePath);
             String fileType = fileTypePath.substring(0, fileTypePath.indexOf("_"));
             String filePath = fileTypePath.substring(fileTypePath.indexOf("_")+1);
@@ -1342,7 +1343,7 @@ class ConnectionUDP extends Thread {
             if (fileType.equals("File")) {
                 // Receive File
                 String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa.png"; // get dir until file
-                System.out.println("DEBUG: Opening " + System.getProperty("user.dir") + a);
+                System.out.println("DEBUG: Opening " + System.getProperty("user.dir") + filePath);
                 File f = new File(System.getProperty("user.dir") + a);
                 FileOutputStream fos = new FileOutputStream(f);
 
@@ -1404,7 +1405,7 @@ class ConnectionUDP extends Thread {
                 String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa";
                 File directory = new File(System.getProperty("user.dir") + a);
                 if (!directory.exists()){
-                    System.out.println("DEBUG: " + System.getProperty("user.dir") + a);
+                    System.out.println("DEBUG: " + System.getProperty("user.dir") + filePath);
                     if (directory.mkdirs()) {
                         System.out.println("DEBUG: Directory has been created successfully");
                     }
@@ -1544,7 +1545,7 @@ class IntegrityUDP extends Thread {
             }
 
 
-            String filePath = new String(data, 1, filePathPacket.getLength() - 1);
+            String filePath = new String(data, 1, filePathPacket.getLength()-1);
             System.out.println("DEBUG: Path received: " + filePath);
 
             // Send if path exists or not
