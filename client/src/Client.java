@@ -144,9 +144,7 @@ public class Client {
                         break;
                     }
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
-            } catch (InterruptedException e) {
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
 
@@ -309,28 +307,32 @@ public class Client {
         /**
          * funtion used to upload files
          * @param path path where file is
-         * @throws Exception
          */
-        public void sendFile(String path, ServerSocket s) throws Exception{
-            Socket cs = s.accept(); // BLOQUEANTE waiting for server
-            DataInputStream in = new DataInputStream(cs.getInputStream());
-            DataOutputStream out = new DataOutputStream(cs.getOutputStream());
+        public void sendFile(String path, ServerSocket s){
+            try {
+                Socket cs = s.accept(); // BLOQUEANTE waiting for server
+                DataInputStream in = new DataInputStream(cs.getInputStream());
+                DataOutputStream out = new DataOutputStream(cs.getOutputStream());
 
-            int bytes = 0;
-            File file = new File(path);
-            FileInputStream fileInputStream = new FileInputStream(file);
+                int bytes = 0;
+                File file = new File(path);
+                FileInputStream fileInputStream = new FileInputStream(file);
 
-            // send file size
-            out.writeLong(file.length());
-            // break file into chunks
-            byte[] buffer = new byte[4*1024];
-            while ((bytes=fileInputStream.read(buffer))!=-1){
-                out.write(buffer,0,bytes);
-                out.flush();
+                // send file size
+                out.writeLong(file.length());
+                // break file into chunks
+                byte[] buffer = new byte[4 * 1024];
+                while ((bytes = fileInputStream.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytes);
+                    out.flush();
+                }
+                fileInputStream.close();
+                cs.close();
+                s.close();
             }
-            fileInputStream.close();
-            cs.close();
-            s.close();
+            catch (Exception e) {
+                System.out.println("ucdrive - something went wrong with the download");
+            }
         }
     }
 
