@@ -22,15 +22,9 @@ public class Server{
      * @param args not used
      */
     public static void main(String[] args){
-        // delete this
-        if(args.length!=1){
-            System.out.println("USAGE: java server hierachy ( where hierachy is 1 or 2 )");
-            return;
-        }
 
-        int deletethis = Integer.parseInt(args[0]); // only used for reading config file on same directory delete on final
         FileAccess FA = new FileAccess();
-        ArrayList<String> config = FA.getconfig(deletethis); // delete parameter
+        ArrayList<String> config = FA.getconfig();
         String serverAddress = config.get(0);
         int serverPort = Integer.parseInt(config.get(1));
         int HBPort = Integer.parseInt(config.get(2));
@@ -43,7 +37,6 @@ public class Server{
         String serverHierachy = config.get(9);
         int IPort = Integer.parseInt(config.get(10));
         int IOtherPort = Integer.parseInt(config.get(11));
-
 
         try {
             HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
@@ -58,7 +51,6 @@ public class Server{
         } catch (InterruptedException | UnknownHostException e) {
             e.printStackTrace();
         }
-
 
         try {
 
@@ -375,23 +367,13 @@ class FileAccess {
 
     /**
      * get server configuration ip, port etc
-     * @param a delete this
      * @return arraylist will all information
      */
-    public synchronized ArrayList<String> getconfig(int a){
-        // delete all this
-        String s;
-        if(a==1){
-            s = "/home/config.txt";
-        }
-        else{
-            s = "/home/otherconfig.txt";
-        }
-
+    public synchronized ArrayList<String> getconfig(){
         ArrayList<String> config = new ArrayList<>();
         try {
             String BASE_DIR = System.getProperty("user.dir");
-            File file = new File(BASE_DIR + s);
+            File file = new File(BASE_DIR + "/home/config.txt");
             Scanner reader = new Scanner(file);
             while (reader.hasNextLine()) {
                 String line = reader.nextLine();
@@ -799,6 +781,11 @@ class Connection extends Thread {
                 System.out.println("DEBUG: " + BASE_DIR + "/home/" + currentDir);
                 if (directory.mkdirs()) {
                     System.out.println("DEBUG: Directory has been created successfully");
+
+                    String aux = "/home/"  + currentDir;
+                    System.out.println("DEBUG: placing - " + aux +" in queue");
+                    fq.put("Folder");
+                    fq.put(aux);
                 }
                 else {
                     System.out.println("DEBUG: Directory cannot be created");
@@ -807,7 +794,7 @@ class Connection extends Thread {
             else
                 System.out.println("DEBUG: Directory already exists");
 
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
     }
@@ -1076,6 +1063,11 @@ class Connection extends Thread {
                 if (!directory.exists()) {
                     if (directory.mkdirs()) {
                         receiveFile(BASE_DIR +"/home/"+ Username + info[1], Integer.parseInt(info[2]));
+
+                        String aux = "/home/"+ Username + dir;
+                        System.out.println("DEBUG: placing - " + aux +" in queue");
+                        fq.put("Folder");
+                        fq.put(aux);
                     } else {
                         System.out.println("DEBUG: an error ocurred while creating folder");
                     }
@@ -1342,9 +1334,8 @@ class ConnectionUDP extends Thread {
 
             if (fileType.equals("File")) {
                 // Receive File
-                String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa.png"; // get dir until file
                 System.out.println("DEBUG: Opening " + System.getProperty("user.dir") + filePath);
-                File f = new File(System.getProperty("user.dir") + a);
+                File f = new File(System.getProperty("user.dir") + filePath);
                 FileOutputStream fos = new FileOutputStream(f);
 
                 int sequenceNumber = 0; // For order
@@ -1402,8 +1393,7 @@ class ConnectionUDP extends Thread {
             }
 
             else if (fileType.equals("Folder")) {
-                String a = filePath.substring(0, filePath.lastIndexOf("/")) + "/aaa";
-                File directory = new File(System.getProperty("user.dir") + a);
+                File directory = new File(System.getProperty("user.dir") + filePath);
                 if (!directory.exists()){
                     System.out.println("DEBUG: " + System.getProperty("user.dir") + filePath);
                     if (directory.mkdirs()) {
@@ -1463,6 +1453,7 @@ class AdminConsole extends UnicastRemoteObject implements AdminInterface{
                     \tconfig delay max_failed - edit heartbeat configurations
                     \tstorage (client) - check how much space is being used
                     \tintegrity - check what files are backed up in 2nd server
+                    
                     """;
             default -> "Invalid command";
         };
