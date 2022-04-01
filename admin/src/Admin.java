@@ -16,8 +16,7 @@ public class Admin {
             }
 
         } catch (Exception e) {
-            System.out.println("Exception in main: " + e);
-            e.printStackTrace();
+            System.out.println("Could not establish RMI connection");
         }
     }
 }

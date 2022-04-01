@@ -41,20 +41,20 @@ public class Server{
         int HBdelay = Integer.parseInt(config.get(7));
         int HBmax = Integer.parseInt(config.get(8));
         String serverHierachy = config.get(9);
-        int IPort = Integer.parseInt(config.get(9));
-        int IOtherPort = Integer.parseInt(config.get(10));
+        int IPort = Integer.parseInt(config.get(10));
+        int IOtherPort = Integer.parseInt(config.get(11));
 
 
         try {
-        HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
-        ConnectionUDP backup = new ConnectionUDP(2,otherip,otherBUPort,BUPort,HB,FA);
-        IntegrityUDP integrity = new IntegrityUDP(otherip,IOtherPort,IPort,HB);
-        HB.start();
-        backup.start();
-        integrity.start();
-        HB.join();
-        backup.join();
-        integrity.join();
+            HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
+            ConnectionUDP backup = new ConnectionUDP(2,otherip,otherBUPort,BUPort,HB,FA);
+            IntegrityUDP integrity = new IntegrityUDP(otherip,IOtherPort,IPort,HB);
+            HB.start();
+            backup.start();
+            integrity.start();
+            HB.join();
+            backup.join();
+            integrity.join();
         } catch (InterruptedException | UnknownHostException e) {
             e.printStackTrace();
         }
@@ -73,7 +73,7 @@ public class Server{
             backup.start();
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
-            AdminConsole rmi = new AdminConsole(FA);
+            AdminConsole rmi = new AdminConsole(FA, HB, otherip, IOtherPort, IPort);
             try {
                 Registry r = LocateRegistry.createRegistry(7001);
                 r.rebind("admin", rmi);
@@ -557,7 +557,7 @@ class FileAccess {
             }
     }
     
-    public boolean fileExists(String filePath, String address, int port, int ourport, HeartBeat HB){
+    public static boolean fileExists(String filePath, String address, int port, int ourport, HeartBeat HB){
         int fExists = 0;
         try {
             DatagramSocket socket = new DatagramSocket(ourport);
@@ -629,13 +629,78 @@ class FileAccess {
                 if (dataFlag) {
                     break;
                 }
-            }            
+            }
+
+            socket.close();
         }
         catch (IOException e) {
             e.printStackTrace();
         }
 
+        System.out.println(fExists);
         return fExists == 1;
+    }
+
+    private static void integrityTree(boolean isValid, File folder, int indent, StringBuilder string, HeartBeat hb, String ipAddress, int otherPort, int port) throws IOException {
+        File[] files = Objects.requireNonNull(folder.listFiles());
+        int count = 0;
+
+        for (File file : files) {
+            count++;
+            if (file.isDirectory()) {
+                string.append(String.join("", Collections.nCopies(indent, "│  ")));
+                if (!Files.newDirectoryStream(file.toPath()).iterator().hasNext() && count == files.length)
+                    string.append("└──");
+                else
+                    string.append("├──");
+                string.append(file.getName()).append("/");
+                if (!isValid) {
+                    string.append(" ✘\n");
+                    integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
+                }
+                else
+                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
+                        string.append(" ✔\n");
+                        integrityTree(true, file, indent + 1, string, hb, ipAddress, otherPort, port);
+                    }
+                    else{
+                        string.append(" ✘\n");
+                        integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
+                    }
+            }
+            else {
+                string.append(String.join("", Collections.nCopies(indent, "│  ")));
+                if (count != files.length)
+                    string.append("├──");
+                else
+                    string.append("└──");
+
+                if (!isValid){
+                    string.append(file.getName()).append(" ✘\n");
+                }
+                else {
+                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
+                        string.append(file.getName()).append(" ✔\n");
+                    } else {
+                        string.append(file.getName()).append(" ✘\n");
+                    }
+                }
+            }
+        }
+    }
+
+    public synchronized String checkIntegrity(String BASE_DIR, String[] info, HeartBeat hb, String ipAddress, int otherPort, int port){
+        if (info.length > 1) return "Too many arguments";
+        else if (info.length < 1) return "Not enough arguments";
+
+        StringBuilder string = new StringBuilder("home ✔/\n");
+        try {
+            integrityTree(true, new File(BASE_DIR + "/home/"), 0, string, hb, ipAddress, otherPort, port);
+        }
+        catch (Exception e){
+            System.out.println("DEBUG: Error while getting integrity tree");
+        }
+        return string.toString();
     }
 }
 
@@ -1365,10 +1430,18 @@ class ConnectionUDP extends Thread {
 
 class AdminConsole extends UnicastRemoteObject implements AdminInterface{
     private final FileAccess fa;
+    private final HeartBeat hb;
+    private final String ipAddress;
+    private final int port;
+    private final int ourPort;
 
-    public AdminConsole(FileAccess FA) throws RemoteException {
+    public AdminConsole(FileAccess FA, HeartBeat HB, String ipAddress, int port, int ourPort) throws RemoteException {
         super();
         this.fa = FA;
+        this.hb = HB;
+        this.ipAddress = ipAddress;
+        this.port = port;
+        this.ourPort = ourPort;
     }
 
     public String adminCommandHandler(String command){
@@ -1376,10 +1449,20 @@ class AdminConsole extends UnicastRemoteObject implements AdminInterface{
         String BASE_DIR = System.getProperty("user.dir");
 
         return switch (info[0]) {
-            case "reg" -> fa.registerClient(BASE_DIR, info);
-            case "tree" -> fa.clientTree(BASE_DIR, info);
-            case "config" -> fa.configServer(BASE_DIR, info);
+            case "reg"     -> fa.registerClient(BASE_DIR, info);
+            case "tree"    -> fa.clientTree(BASE_DIR, info);
+            case "config"  -> fa.configServer(BASE_DIR, info);
             case "storage" -> fa.clientStorage(BASE_DIR, info);
+            case "integrity" -> fa.checkIntegrity(BASE_DIR, info, hb, ipAddress, port, ourPort);
+            case "help" -> """
+
+                    \texit - end RMI connection
+                    \treg client password - create new client
+                    \ttree client - check file tree
+                    \tconfig delay max_failed - edit heartbeat configurations
+                    \tstorage (client) - check how much space is being used
+                    \tintegrity - check what files are backed up in 2nd server
+                    """;
             default -> "Invalid command";
         };
     }
@@ -1461,7 +1544,7 @@ class IntegrityUDP extends Thread {
             }
 
 
-            String filePath = new String(data, 1, filePathPacket.getLength());
+            String filePath = new String(data, 1, filePathPacket.getLength() - 1);
             System.out.println("DEBUG: Path received: " + filePath);
 
             // Send if path exists or not
