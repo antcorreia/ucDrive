@@ -68,7 +68,7 @@ public class Server{
             backup.start();
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
-            AdminConsole rmi = new AdminConsole();
+            AdminConsole rmi = new AdminConsole(FA);
             try {
                 Registry r = LocateRegistry.createRegistry(7001);
                 r.rebind("admin", rmi);
@@ -110,7 +110,7 @@ class HeartBeat extends Thread{
             reply = new DatagramPacket(buffer, buffer.length, otherip, otherport);
             request = new DatagramPacket(buffer, buffer.length);
             primary = hierarchy;
-            hb_cont = 5; // read from config file
+            hb_cont = cont;
             hb_default = hb_cont;
             delay = d;
 
@@ -127,7 +127,6 @@ class HeartBeat extends Thread{
         while (true) {
             try {
                 socket.receive(request);
-                //System.out.println("recebi do failover");
                 socket.send(reply);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -238,7 +237,6 @@ class HeartBeat extends Thread{
             while(true){
                 try {
                     socket.send(reply);
-                    //System.out.println("mandei");
                     hb_cont--;
                     Thread.sleep(delay);
                     if(hb_cont<0){
@@ -259,7 +257,6 @@ class HeartBeat extends Thread{
 
 class FileAccess {
     private boolean updateClientstxt = false;
-    private boolean updateConfigtxt = false;
 
     /**
      * get user information from clients.txt
@@ -407,20 +404,152 @@ class FileAccess {
         return config;
     }
 
+    /**
+     * see if there is already a clients.txt
+     * @return bool
+     */
     public synchronized boolean isUpdateClientstxt() {
         return updateClientstxt;
     }
 
+    /**
+     * update value if clients.txt is inserted or removed of the pipe
+     */
     public synchronized void setUpdateClientstxt(boolean updateClientstxt) {
         this.updateClientstxt = updateClientstxt;
     }
 
-    public synchronized boolean isUpdateConfigtxt() {
-        return updateConfigtxt;
+    public String registerClient(String BASE_DIR, String[] info){
+        ArrayList<String> lines = new ArrayList<>();
+
+        if (info.length > 3) return "Too many arguments";
+        else if (info.length < 3) return "Not enough arguments";
+        try {
+            Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/clients.txt"));
+            while (fileReader.hasNextLine()) {
+                String line = fileReader.nextLine();
+                lines.add(line);
+                String[] splitLine = line.split(" / ");
+
+                if (Objects.equals(splitLine[0], info[1]))
+                    return "Client already exists";
+            }
+            fileReader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
+            for (String s: lines) fileWriter.write(s + "\n");
+            fileWriter.write(String.format("%s / %s / %s/home\n", info[1], info[2], info[1]));
+            fileWriter.close();
+            if (!new File(BASE_DIR + "/home/" + info[1] + "/home").mkdirs())
+                System.out.println("DEBUG: Error creating client folder");
+        }
+        catch (Exception e){
+            e.printStackTrace();
+        }
+
+        return "New client registered";
     }
 
-    public synchronized void setUpdateConfigtxt(boolean updateConfigtxt) {
-        this.updateConfigtxt = updateConfigtxt;
+    private static void fileTree(File folder, int indent, StringBuilder string) throws IOException {
+        File[] files = Objects.requireNonNull(folder.listFiles());
+        int count = 0;
+
+        for (File file : files) {
+            count++;
+            if (file.isDirectory()) {
+                string.append(String.join("", Collections.nCopies(indent, "│  ")));
+                if (!Files.newDirectoryStream(file.toPath()).iterator().hasNext() && count == files.length)
+                    string.append("└──");
+                else
+                    string.append("├──");
+                string.append(file.getName()).append("/\n");
+                fileTree(file, indent + 1, string);
+            } else {
+                string.append(String.join("", Collections.nCopies(indent, "│  ")));
+                if (count != files.length)
+                    string.append("├──");
+                else
+                    string.append("└──");
+                string.append(file.getName()).append("\n");
+            }
+        }
+    }
+
+    public synchronized String clientTree(String BASE_DIR, String[] info){
+        if (info.length > 2) return "Too many arguments";
+        else if (info.length < 2) return "Not enough arguments";
+
+        StringBuilder string = new StringBuilder(info[1] + "/\n");
+        try {
+            fileTree(new File(BASE_DIR + "/home/" + info[1] + "/"), 0, string);
+        }
+        catch (Exception e){
+            return "Client " + info[1] + " doesn't exist";
+        }
+        return string.toString();
+    }
+
+    public synchronized String configServer(String BASE_DIR, String[] info){
+        if (info.length > 3) return "Too many arguments";
+        else if (info.length < 3) return "Not enough arguments";
+
+        try {
+            ArrayList<String> lines = new ArrayList<>();
+            Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/config.txt"));
+
+            while (fileReader.hasNextLine()){
+                String line = fileReader.nextLine();
+
+                String[] splitServerLine = line.split(": ");
+                if (Objects.equals(splitServerLine[0], "DELAY"))
+                    lines.add("DELAY: " + info[1]);
+                else if (Objects.equals(splitServerLine[0], "MAX FAILED"))
+                    lines.add("MAX FAILED: " + info[2]);
+                else
+                    lines.add(line);
+            }
+            fileReader.close();
+
+            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/config.txt");
+            for (String s: lines) fileWriter.write(s + "\n");
+            fileWriter.close();
+        }
+        catch (FileNotFoundException e){
+            return "Configuration files not found";
+        } catch (Exception e) {
+            return "Error while writing to file";
+        }
+
+        return "Configuration file successfully edited";
+    }
+
+    private static long getFolderSize(File folder) throws NullPointerException{
+        long length = 0;
+
+        File[] files = folder.listFiles();
+
+        for (File file : files)
+            if (file.isFile())
+                length += file.length();
+            else
+                length += getFolderSize(file);
+
+        return length;
+    }
+
+    public synchronized String clientStorage(String BASE_DIR, String[] info){
+        if (info.length > 2) return "Too many arguments";
+        else if (info.length < 1) return "Not enough arguments";
+
+        if (info.length == 1)
+            return "Total space occupied is: " + getFolderSize(new File(BASE_DIR + "/home/")) + " bytes";
+        else
+            try {
+                return "Client " + info[1] + " is occupying " + getFolderSize(new File(BASE_DIR + "/home/" + info[1])) + " bytes";
+            }
+            catch (NullPointerException e){
+                return "Client " + info[1] + " doesn't exist";
+            }
     }
 }
 
@@ -661,7 +790,7 @@ class Connection extends Thread {
                     if (!fa.isUpdateClientstxt()) {
                         fq.put("File");
                         fq.put("/home/clients.txt");
-                        fa.setUpdateConfigtxt(true);
+                        fa.setUpdateClientstxt(true);
                     }
                     return "server /" + currentDir + " > ";
                 }
@@ -673,7 +802,7 @@ class Connection extends Thread {
                             if (!fa.isUpdateClientstxt()) {
                                 fq.put("File");
                                 fq.put("/home/clients.txt");
-                                fa.setUpdateConfigtxt(true);
+                                fa.setUpdateClientstxt(true);
                             }
                             return "server /" + currentDir + " >";
                         }
@@ -682,7 +811,7 @@ class Connection extends Thread {
                         if (!fa.isUpdateClientstxt()) {
                             fq.put("File");
                             fq.put("/home/clients.txt");
-                            fa.setUpdateConfigtxt(true);
+                            fa.setUpdateClientstxt(true);
                         }
                         return "server /" + currentDir + " > " ;
                     }
@@ -696,7 +825,7 @@ class Connection extends Thread {
                             if (!fa.isUpdateClientstxt()) {
                                 fq.put("File");
                                 fq.put("/home/clients.txt");
-                                fa.setUpdateConfigtxt(true);
+                                fa.setUpdateClientstxt(true);
                             }
                             return "server /" + currentDir + " > " ;
                         }
@@ -720,7 +849,7 @@ class Connection extends Thread {
                         if (!fa.isUpdateClientstxt()) {
                             fq.put("File");
                             fq.put("/home/clients.txt");
-                            fa.setUpdateConfigtxt(true);
+                            fa.setUpdateClientstxt(true);
                         }
 
                         String aux = "/home/"  + currentDir;
@@ -855,7 +984,7 @@ class ConnectionUDP extends Thread {
                     System.out.println("DEBUG: saving file: " + path + " on second server");
                     sendFileUDP(type, path);
                     if (path.equals("/home/clients.txt"))
-                        fa.setUpdateConfigtxt(false);
+                        fa.setUpdateClientstxt(false);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -1148,155 +1277,22 @@ class ConnectionUDP extends Thread {
 }
 
 class AdminConsole extends UnicastRemoteObject implements AdminInterface{
-    private static final long serialVersionUID = 1L;
+    private final FileAccess fa;
 
-    public AdminConsole() throws RemoteException {
+    public AdminConsole(FileAccess FA) throws RemoteException {
         super();
+        this.fa = FA;
     }
-
-    public String registerClient(String BASE_DIR, String[] info){
-        ArrayList<String> lines = new ArrayList<>();
-
-        if (info.length > 3) return "Too many arguments";
-        else if (info.length < 3) return "Not enough arguments";
-        try {
-            Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/clients.txt"));
-            while (fileReader.hasNextLine()) {
-                String line = fileReader.nextLine();
-                lines.add(line);
-                String[] splitLine = line.split(" / ");
-
-                if (Objects.equals(splitLine[0], info[1]))
-                    return "Client already exists";
-            }
-            fileReader.close();
-
-            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
-            for (String s: lines) fileWriter.write(s + "\n");
-            fileWriter.write(String.format("%s / %s / %s/home\n", info[1], info[2], info[1]));
-            fileWriter.close();
-            if (!new File(BASE_DIR + "/home/" + info[1] + "/home").mkdirs())
-                System.out.println("DEBUG: Error creating client folder");
-        }
-        catch (Exception e){
-            e.printStackTrace();
-        }
-
-        return "New client registered";
-    }
-
-    private static void fileTree(File folder, int indent, StringBuilder string) throws IOException {
-        File[] files = Objects.requireNonNull(folder.listFiles());
-        int count = 0;
-
-        for (File file : files) {
-            count++;
-            if (file.isDirectory()) {
-                string.append(String.join("", Collections.nCopies(indent, "│  ")));
-                if (!Files.newDirectoryStream(file.toPath()).iterator().hasNext() && count == files.length)
-                    string.append("└──");
-                else
-                    string.append("├──");
-                string.append(file.getName()).append("/\n");
-                fileTree(file, indent + 1, string);
-            } else {
-                string.append(String.join("", Collections.nCopies(indent, "│  ")));
-                if (count != files.length)
-                    string.append("├──");
-                else
-                    string.append("└──");
-                string.append(file.getName()).append("\n");
-            }
-        }
-    }
-
-    public static String clientTree(String BASE_DIR, String[] info){
-        if (info.length > 2) return "Too many arguments";
-        else if (info.length < 2) return "Not enough arguments";
-
-        StringBuilder string = new StringBuilder(info[1] + "/\n");
-        try {
-            fileTree(new File(BASE_DIR + "/home/" + info[1] + "/"), 0, string);
-        }
-        catch (Exception e){
-            return "Client " + info[1] + " doesn't exist";
-        }
-        return string.toString();
-    }
-
-    public static String configServer(String BASE_DIR, String[] info){
-        if (info.length > 3) return "Too many arguments";
-        else if (info.length < 3) return "Not enough arguments";
-
-        try {
-            ArrayList<String> lines = new ArrayList<>();
-            Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/config.txt"));
-
-            while (fileReader.hasNextLine()){
-                String line = fileReader.nextLine();
-
-                String[] splitServerLine = line.split(": ");
-                if (Objects.equals(splitServerLine[0], "DELAY"))
-                    lines.add("DELAY: " + info[1]);
-                else if (Objects.equals(splitServerLine[0], "MAX FAILED"))
-                    lines.add("MAX FAILED: " + info[2]);
-                else
-                    lines.add(line);
-            }
-            fileReader.close();
-
-            FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/config.txt");
-            for (String s: lines) fileWriter.write(s + "\n");
-            fileWriter.close();
-        }
-        catch (FileNotFoundException e){
-            return "Configuration files not found";
-        } catch (Exception e) {
-            return "Error while writing to file";
-        }
-
-        return "Configuration file successfully edited";
-    }
-
-    private static long getFolderSize(File folder) throws NullPointerException{
-        long length = 0;
-
-        File[] files = folder.listFiles();
-
-        for (File file : files)
-            if (file.isFile())
-                length += file.length();
-            else
-                length += getFolderSize(file);
-
-        return length;
-    }
-
-    public String clientStorage(String BASE_DIR, String[] info){
-        if (info.length > 2) return "Too many arguments";
-        else if (info.length < 2) return "Not enough arguments";
-
-        if (info[1].equals("total"))
-            return "Total space occupied is: " + getFolderSize(new File(BASE_DIR + "/home/")) + " bytes";
-        else
-            try {
-                return "Client " + info[1] + " is occupying " + getFolderSize(new File(BASE_DIR + "/home/" + info[1])) + " bytes";
-            }
-            catch (NullPointerException e){
-                return "Client " + info[1] + " doesn't exist";
-            }
-    }
-
 
     public String adminCommandHandler(String command){
         String[] info = command.split(" ");
         String BASE_DIR = System.getProperty("user.dir");
 
         return switch (info[0]) {
-            case "reg" -> registerClient(BASE_DIR, info);
-            case "tree" -> clientTree(BASE_DIR, info);
-            case "config" -> configServer(BASE_DIR, info);
-            case "storage" -> clientStorage(BASE_DIR, info);
+            case "reg" -> fa.registerClient(BASE_DIR, info);
+            case "tree" -> fa.clientTree(BASE_DIR, info);
+            case "config" -> fa.configServer(BASE_DIR, info);
+            case "storage" -> fa.clientStorage(BASE_DIR, info);
             default -> "Invalid command";
         };
 
