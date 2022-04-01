@@ -188,7 +188,7 @@ public class Client {
                     commands += "\tcd .. - previous directory\n";
                     commands += "\tcd dir - go to dir directory\n";
                     commands += "\tmkdir dir - create dir directory\n";
-                    commands += "\tupload filename /home/dir/ - create dir directory\n";
+                    commands += "\tupload filename /home/path/ - upload file to server path\n";
                     return commands + "\nlocal /" + currentDir + " > ";
                 }
 
@@ -331,7 +331,7 @@ public class Client {
                 s.close();
             }
             catch (Exception e) {
-                System.out.println("ucdrive - something went wrong with the download");
+                System.out.println("DEBUG: something went wrong with the upload");
             }
         }
     }
@@ -399,8 +399,7 @@ public class Client {
                 fileOutputStream.close();
                 s.close();
             } catch (IOException e) {
-                // an error on download server crached
-                // call delete function
+                System.out.println("DEBUG: something went wrong with the download");
             }
         }
 

@@ -741,8 +741,7 @@ class Connection extends Thread {
             fileOutputStream.close();
             s.close();
         } catch (IOException e) {
-            // an error occurred while receiving file delete
-            // call delete funcion
+            System.out.println("DEBUG: client disconnected, upload failed");
         }
 
     }
@@ -759,10 +758,12 @@ class Connection extends Thread {
                 String commands = "";
                 commands += "\n\trp - reset password\n";
                 commands += "\texit - leave server\n";
+                commands += "\tls - files in current directory\n";
                 commands += "\tcd - home directory\n";
                 commands += "\tcd .. - previous directory\n";
                 commands += "\tcd dir - go to dir directory\n";
                 commands += "\tmkdir dir - create dir directory\n";
+                commands += "\tdownload filename /home/path/ - download file to local path\n";
                 return commands + "\nserver /" + currentDir + " > ";
             }
 
