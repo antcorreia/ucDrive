@@ -45,7 +45,7 @@ public class Server{
 
         try {
         HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
-        ConnectionUDP backup = new ConnectionUDP(2,otherip,otherBUPort,BUPort,HB);
+        ConnectionUDP backup = new ConnectionUDP(2,otherip,otherBUPort,BUPort,HB,FA);
         HB.start();
         backup.start();
         HB.join();
@@ -64,7 +64,7 @@ public class Server{
             BlockingQueue<String> filequeue = new LinkedBlockingQueue<>();
             HeartBeat HB = new HeartBeat(true,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
             HB.start();
-            ConnectionUDP backup = new ConnectionUDP(1,otherip,otherBUPort,BUPort,filequeue);
+            ConnectionUDP backup = new ConnectionUDP(1,otherip,otherBUPort,BUPort,filequeue,FA);
             backup.start();
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
@@ -258,6 +258,8 @@ class HeartBeat extends Thread{
 }
 
 class FileAccess {
+    private boolean updateClientstxt = false;
+    private boolean updateConfigtxt = false;
 
     /**
      * get user information from clients.txt
@@ -405,6 +407,21 @@ class FileAccess {
         return config;
     }
 
+    public synchronized boolean isUpdateClientstxt() {
+        return updateClientstxt;
+    }
+
+    public synchronized void setUpdateClientstxt(boolean updateClientstxt) {
+        this.updateClientstxt = updateClientstxt;
+    }
+
+    public synchronized boolean isUpdateConfigtxt() {
+        return updateConfigtxt;
+    }
+
+    public synchronized void setUpdateConfigtxt(boolean updateConfigtxt) {
+        this.updateConfigtxt = updateConfigtxt;
+    }
 }
 
 class Connection extends Thread {
@@ -522,12 +539,20 @@ class Connection extends Thread {
         try {
             out.writeUTF("server - new password: ");
             String newpass = in.readUTF();
-            if(fa.changePassword(Username, newpass))
+            if(fa.changePassword(Username, newpass)) {
+                if (!fa.isUpdateClientstxt()) {
+                    fq.put("File");
+                    fq.put("/home/clients.txt");
+                    fa.setUpdateClientstxt(true);
+                }
                 return true;
+            }
 
         }
         catch(IOException e) {
             System.out.println("IO:" + e);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
         return false;
     }
@@ -602,7 +627,7 @@ class Connection extends Thread {
         try {
 
             if(command.equals("help")){
-                String commands = "";;
+                String commands = "";
                 commands += "\n\trp - reset password\n";
                 commands += "\texit - leave server\n";
                 commands += "\tcd - home directory\n";
@@ -633,6 +658,11 @@ class Connection extends Thread {
                 if(command.equals("cd")){
                     currentDir = Username + "/home";
                     fa.saveCurrentDir(Username,currentDir);
+                    if (!fa.isUpdateClientstxt()) {
+                        fq.put("File");
+                        fq.put("/home/clients.txt");
+                        fa.setUpdateConfigtxt(true);
+                    }
                     return "server /" + currentDir + " > ";
                 }
                 else{
@@ -640,10 +670,20 @@ class Connection extends Thread {
                     if(nextCommand.equals(" ..")){
                         if(currentDir.equals(Username + "/home")){
                             fa.saveCurrentDir(Username,currentDir);
+                            if (!fa.isUpdateClientstxt()) {
+                                fq.put("File");
+                                fq.put("/home/clients.txt");
+                                fa.setUpdateConfigtxt(true);
+                            }
                             return "server /" + currentDir + " >";
                         }
                         currentDir = currentDir.substring(0,currentDir.lastIndexOf("/"));
                         fa.saveCurrentDir(Username,currentDir);
+                        if (!fa.isUpdateClientstxt()) {
+                            fq.put("File");
+                            fq.put("/home/clients.txt");
+                            fa.setUpdateConfigtxt(true);
+                        }
                         return "server /" + currentDir + " > " ;
                     }
                     if(nextCommand.charAt(0) == ' '){
@@ -653,6 +693,11 @@ class Connection extends Thread {
                         if (directory.exists()) {
                             currentDir = currentDir + "/" + nextDir;
                             fa.saveCurrentDir(Username,currentDir);
+                            if (!fa.isUpdateClientstxt()) {
+                                fq.put("File");
+                                fq.put("/home/clients.txt");
+                                fa.setUpdateConfigtxt(true);
+                            }
                             return "server /" + currentDir + " > " ;
                         }
                         else
@@ -671,6 +716,12 @@ class Connection extends Thread {
                     if (directory.mkdirs()) {
                         System.out.println("DEBUG: Directory has been created successfully");
                         currentDir = currentDir + "/" + newFolder;
+                        fa.saveCurrentDir(Username,currentDir);
+                        if (!fa.isUpdateClientstxt()) {
+                            fq.put("File");
+                            fq.put("/home/clients.txt");
+                            fa.setUpdateConfigtxt(true);
+                        }
 
                         String aux = "/home/"  + currentDir;
                         System.out.println("DEBUG: placing - " + aux +" in queue");
@@ -769,22 +820,25 @@ class ConnectionUDP extends Thread {
     private String address;
     private int port;
     private int ourport;
+    private FileAccess fa;
     private BlockingQueue<String> fq;
     private HeartBeat HB;
 
-    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport,BlockingQueue<String> filequeue){
+    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport,BlockingQueue<String> filequeue,FileAccess f){
         this.serverHierarchy = serverHierarchy;
         this.address = address;
         this.port = port;
         this.ourport = otherport;
         this.fq = filequeue;
+        this.fa = f;
     }
-    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport, HeartBeat hb){
+    public ConnectionUDP(int serverHierarchy, String address, int port,int otherport, HeartBeat hb,FileAccess f){
         this.serverHierarchy = serverHierarchy;
         this.address = address;
         this.port = port;
         this.ourport = otherport;
         this.HB = hb;
+        this.fa = f;
     }
 
     /**
@@ -800,6 +854,8 @@ class ConnectionUDP extends Thread {
                     String path = fq.take();
                     System.out.println("DEBUG: saving file: " + path + " on second server");
                     sendFileUDP(type, path);
+                    if (path.equals("/home/clients.txt"))
+                        fa.setUpdateConfigtxt(false);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
