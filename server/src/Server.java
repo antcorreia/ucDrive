@@ -1,86 +1,111 @@
 import java.net.*;
 import java.io.*;
+
 import java.nio.file.Files;
+
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
+import java.rmi.registry.*;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Objects;
-import java.util.Scanner;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+
+import java.util.*;
+import java.util.concurrent.*;
 
 public class Server{
 
     /**
-     * main funtion where connection to clients are made
-     * get all configuration from config.txt using getconfig
-     * all servers start at default 'second server' where its determined if they are meant to be kept like that or start
-     * as main server. start hearbeat, backup, rmi, client listening
-     * @param args not used
+     * > Main function where connection to clients are made;
+     * > Gets all configurations from 'config.txt' using 'getconfig';
+     * > All servers start at default 'second server' where it is determined if they are meant to be kept like that
+     *   or start as main server;
+     * > Starts Heartbeat, Backup, RMI and client listening;
+     *
+     * @param args are not used;
      */
     public static void main(String[] args){
 
+        // Initialize synchronized file access object
         FileAccess FA = new FileAccess();
-        ArrayList<String> config = FA.getconfig();
-        String serverAddress = config.get(0);
-        int serverPort = Integer.parseInt(config.get(1));
-        int HBPort = Integer.parseInt(config.get(2));
-        int BUPort = Integer.parseInt(config.get(3));
-        String otherip = config.get(4);
-        int otherHBPort = Integer.parseInt(config.get(5));
-        int otherBUPort = Integer.parseInt(config.get(6));
-        int HBdelay = Integer.parseInt(config.get(7));
-        int HBmax = Integer.parseInt(config.get(8));
-        String serverHierachy = config.get(9);
-        int IPort = Integer.parseInt(config.get(10));
-        int IOtherPort = Integer.parseInt(config.get(11));
 
+        // Get server configurations
+        ArrayList<String> config = FA.getconfig();
+        String serverAddress = config.get(0);              // Server address
+        int serverPort = Integer.parseInt(config.get(1));  // Server port
+        int HBPort = Integer.parseInt(config.get(2));      // Server Heartbeat port
+        int BUPort = Integer.parseInt(config.get(3));      // Server Backup port
+
+        // Get second server configurations
+        String otherip = config.get(4);                    // Second server IP
+        int otherHBPort = Integer.parseInt(config.get(5)); // Second server Heartbeat port
+        int otherBUPort = Integer.parseInt(config.get(6)); // Second server Backup port
+
+        // Get heartbeat configurations
+        int HBdelay = Integer.parseInt(config.get(7));     // Delay
+        int HBmax = Integer.parseInt(config.get(8));       // Max failed
+        String serverHierachy = config.get(9);             // Hierarchy
+
+        // Get integrity configurations
+        int IPort = Integer.parseInt(config.get(10));      // Server port
+        int IOtherPort = Integer.parseInt(config.get(11)); // Second server port
+
+        // Initializing server as backup by default (if it is not the secondary it will not be stuck here)
         try {
-            HeartBeat HB = new HeartBeat(false,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,serverHierachy);
+            // Create objects
+            HeartBeat HB = new HeartBeat(false, InetAddress.getByName(otherip), otherHBPort, HBPort, HBmax, HBdelay, serverHierachy);
             ConnectionUDP backup = new ConnectionUDP(2,otherip,otherBUPort,BUPort,HB,FA);
             IntegrityUDP integrity = new IntegrityUDP(otherip,IOtherPort,IPort,HB);
+
+            // Start threads
             HB.start();
             backup.start();
             integrity.start();
+
+            // Join threads
             HB.join();
             backup.join();
             integrity.join();
-        } catch (InterruptedException | UnknownHostException e) {
+        }
+        catch (InterruptedException | UnknownHostException e) {
             e.printStackTrace();
         }
 
+        // Initializing server as primary
         try {
-
+            // Enabling connection socket
             ServerSocket listenSocket = new ServerSocket();
             SocketAddress sockaddr = new InetSocketAddress(serverAddress, serverPort);
             listenSocket.bind(sockaddr);
 
+            // File backup queue
             BlockingQueue<String> filequeue = new LinkedBlockingQueue<>();
-            HeartBeat HB = new HeartBeat(true,InetAddress.getByName(otherip),otherHBPort,HBPort,HBmax,HBdelay,"1");
+
+            // Initializing Heartbeat
+            HeartBeat HB = new HeartBeat(true, InetAddress.getByName(otherip), otherHBPort, HBPort, HBmax, HBdelay, "1");
             HB.start();
+
+            // Initializing Backup
             ConnectionUDP backup = new ConnectionUDP(1,otherip,otherBUPort,BUPort,filequeue,FA);
             backup.start();
 
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
-            AdminConsole rmi = new AdminConsole(FA, HB, otherip, IOtherPort, IPort);
-            try {
-                Registry r = LocateRegistry.createRegistry(7001);
-                r.rebind("admin", rmi);
 
-                System.out.println("DEGUB: RMI port enabled");
-            }
-            catch (RemoteException re) {
-                System.out.println("DEBUG: an error occurred while enabling RMI port: " + re);
-            }
+            // Enabling RMI
+            AdminConsole rmi = new AdminConsole(FA, HB, otherip, IOtherPort, IPort);
+            Registry r = LocateRegistry.createRegistry(7001);
+            r.rebind("admin", rmi);
+
+            System.out.println("DEGUB: RMI port enabled");
+
+            // Loop to handle new clients
             while(true) {
-                Socket clientSocket = listenSocket.accept(); // BLOQUEANTE
-                System.out.println("DEBUG: Client connected, clientsocket = "+clientSocket);
+                Socket clientSocket = listenSocket.accept(); // Blocking
+                System.out.println("DEBUG: Client connected, clientsocket = " + clientSocket);
                 new Connection(clientSocket, FA, filequeue);
             }
-        } catch(IOException e) {
+        }
+        catch (RemoteException re) {
+            System.out.println("DEBUG: an error occurred while enabling RMI port: " + re);
+        }
+        catch(IOException e) {
             e.printStackTrace();
             System.out.println("Listen: " + e.getMessage());
         }
@@ -91,113 +116,126 @@ class HeartBeat extends Thread{
 
     private DatagramPacket request, reply;
     private DatagramSocket socket;
-    private static byte[] buffer = new byte[1];
     private boolean primary;
     private static String message;
     public static int hb_cont;
     public static int hb_default;
-    public static int delay;
+    public int delay;
 
-    public HeartBeat(boolean hierarchy,InetAddress otherip,int otherport,int port, int cont, int d, String m){
-
+    public HeartBeat(boolean hierarchy, InetAddress otherip, int otherport, int port, int cont, int d, String m){
         try {
-            socket = new DatagramSocket(port);
+            // Getting Heartbeat socket
+            this.socket = new DatagramSocket(port);
+
+            // Message to send (hierarchy value)
             message = m;
-            buffer = message.getBytes();
-            reply = new DatagramPacket(buffer, buffer.length, otherip, otherport);
+            byte[] buffer = message.getBytes();
+            this.reply = new DatagramPacket(buffer, buffer.length, otherip, otherport);
+
+            // Message to receive
             byte[] b = new byte[1];
-            request = new DatagramPacket(b, b.length);
-            primary = hierarchy;
+            this.request = new DatagramPacket(b, b.length);
+
+            // Define hierarchy
+            this.primary = hierarchy;
+
+            // Ping counter
             hb_cont = cont;
             hb_default = hb_cont;
+
+            // Ping delay
             delay = d;
 
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     /**
-     * function executed by primary server, resends what it recevies
+     * > Function executed by primary server, resends what it receives;
      */
     public void ackping(){
-
-        while (true) {
+        // Acknowledge loop
+        while (true)
             try {
                 socket.receive(request);
                 socket.send(reply);
-            } catch (IOException e) {
+            }
+            catch (IOException e) {
                 e.printStackTrace();
                 socket.close();
             }
-
-        }
-
     }
 
     /**
-     * runner will start either ack or threads to send and receive, depending on the server being main or second
+     * > Runner will start either ack or threads to send and receive, depending on the server being primary
+     *   or secondary;
      */
     public void run(){
-        if(primary) {
-            ackping();
-        }
+
+        // Check if it is the primary server
+        if(primary) ackping();
         else{
-            PingRecv pingrecv = new PingRecv(request,socket,delay,hb_cont);
+            // Receive pings
+            PingRecv pingrecv = new PingRecv(this.request, this.socket, this.delay, hb_cont);
             pingrecv.start();
+
+            // Send pings
             PingSend pingsend = new PingSend(reply,socket,delay);
             pingsend.start();
 
             try {
+                // Join threads
                 pingrecv.join();
                 pingsend.join();
-            } catch (InterruptedException e) {
+            }
+            catch (InterruptedException e) {
                 e.printStackTrace();
             }
+
+            // Close socket
             socket.close();
         }
 
     }
 
     /**
-     * class to receive pings
+     * > Class to receive pings;
      */
     public static class PingRecv extends Thread{
 
-        private DatagramPacket request;
-        private DatagramSocket socket;
-        private int delay;
-        private int max;
+        private final DatagramPacket request;
+        private final DatagramSocket socket;
+        private final int delay;
+        private final int max;
 
         public PingRecv( DatagramPacket r, DatagramSocket s, int d, int m){
-            request = r;
-            socket = s;
-            delay = d;
-            max = m;
+            this.request = r;
+            this.socket = s;
+            this.delay = d;
+            this.max = m;
         }
 
         /**
-         * runner will have a socket oponed for as long has the max number of pings to become main is set.
-         * After this delay will see if the counter is at 0, if it is it breaks loop. if it receives ack
-         * it resets counter.
-         * because default is secondary server, there will be two scenarios, either the server pings n times and the other
-         * doest respond and it becomes main, or they are started at the same time, to determine wich server should become
-         * main the one with the higher hierachy wins
+         * > Runner will have a socket opened for as long as the max number of pings to become main is set.
+         *   After this delay will see if the counter is at 0, and if so, it breaks the loop.
+         *   If it receives ack it resets the counter;
+         * > Because the default is secondary server, there will be two scenarios, either the server pings
+         *   n times with no response and it becomes main, or they are started at the same time, to determine
+         *   which server should become main: the one with the higher hierarchy wins;
          */
         public void run(){
 
-            while(true){
+            while(true)
                 try {
-                    socket.setSoTimeout(delay*max); // equals the amount of time to send all ack iteration
+                    // Sets the amount of time to send all ack iterations
+                    socket.setSoTimeout(delay*max);
                     hb_cont = hb_default;
                     socket.receive(request);
+
                     int r = Integer.parseInt(new String(request.getData(), 0, request.getLength()));
-                    if(r > Integer.parseInt(message)){ // 2 < 1
-                        break;
-                    }
-                    if(hb_cont<0){
-                        break;
-                    }
+                    if(r > Integer.parseInt(message) || hb_cont < 0) break;
                 }
                 catch (SocketTimeoutException e){
                     break;
@@ -205,52 +243,48 @@ class HeartBeat extends Thread{
                 catch (IOException e) {
                     e.printStackTrace();
                 }
-
-            }
-
         }
-
     }
 
     /**
-     * class that sends pings
+     * > Class that sends pings;
      */
     public static class PingSend extends Thread{
 
-        private DatagramPacket reply;
-        private DatagramSocket socket;
-        private int delay;
+        private final DatagramPacket reply;
+        private final DatagramSocket socket;
+        private final int delay;
 
-        public PingSend(DatagramPacket r,DatagramSocket s, int d){
-            delay = d;
-            socket = s;
-            reply = r;
+        public PingSend(DatagramPacket r, DatagramSocket s, int d){
+            this.delay = d;
+            this.socket = s;
+            this.reply = r;
         }
 
         /**
-         * runner sends pings delay by some time, and decrements counter
+         * > Runner sends pings, sleeps for some time, and decrements counter;
          */
         public void run(){
 
-            while(true){
+            while(true)
                 try {
+                    // Send reply
                     socket.send(reply);
-                    hb_cont--;
-                    Thread.sleep(delay);
-                    if(hb_cont<0){
-                        break;
-                    }
 
-                } catch (IOException | InterruptedException e) {
+                    // Decrement counter
+                    hb_cont--;
+
+                    // Sleep
+                    Thread.sleep(delay);
+
+                    if(hb_cont<0) break;
+
+                } 
+                catch (IOException | InterruptedException e) {
                     e.printStackTrace();
                 }
-
-            }
-
         }
-
     }
-
 }
 
 class FileAccess {
@@ -1419,47 +1453,6 @@ class ConnectionUDP extends Thread {
     }
 }
 
-class AdminConsole extends UnicastRemoteObject implements AdminInterface{
-    private final FileAccess fa;
-    private final HeartBeat hb;
-    private final String ipAddress;
-    private final int port;
-    private final int ourPort;
-
-    public AdminConsole(FileAccess FA, HeartBeat HB, String ipAddress, int port, int ourPort) throws RemoteException {
-        super();
-        this.fa = FA;
-        this.hb = HB;
-        this.ipAddress = ipAddress;
-        this.port = port;
-        this.ourPort = ourPort;
-    }
-
-    public String adminCommandHandler(String command){
-        String[] info = command.split(" ");
-        String BASE_DIR = System.getProperty("user.dir");
-
-        return switch (info[0]) {
-            case "reg"     -> fa.registerClient(BASE_DIR, info);
-            case "tree"    -> fa.clientTree(BASE_DIR, info);
-            case "config"  -> fa.configServer(BASE_DIR, info);
-            case "storage" -> fa.clientStorage(BASE_DIR, info);
-            case "integrity" -> fa.checkIntegrity(BASE_DIR, info, hb, ipAddress, port, ourPort);
-            case "help" -> """
-
-                    \texit - end RMI connection
-                    \treg client password - create new client
-                    \ttree client - check file tree
-                    \tconfig delay max_failed - edit heartbeat configurations
-                    \tstorage (client) - check how much space is being used
-                    \tintegrity - check what files are backed up in 2nd server
-                    
-                    """;
-            default -> "Invalid command";
-        };
-    }
-}
-
 class IntegrityUDP extends Thread {
     private String address;
     private int port;
@@ -1582,5 +1575,46 @@ class IntegrityUDP extends Thread {
         }
 
         return true;
+    }
+}
+
+class AdminConsole extends UnicastRemoteObject implements AdminInterface{
+    private final FileAccess fa;
+    private final HeartBeat hb;
+    private final String ipAddress;
+    private final int port;
+    private final int ourPort;
+
+    public AdminConsole(FileAccess FA, HeartBeat HB, String ipAddress, int port, int ourPort) throws RemoteException {
+        super();
+        this.fa = FA;
+        this.hb = HB;
+        this.ipAddress = ipAddress;
+        this.port = port;
+        this.ourPort = ourPort;
+    }
+
+    public String adminCommandHandler(String command){
+        String[] info = command.split(" ");
+        String BASE_DIR = System.getProperty("user.dir");
+
+        return switch (info[0]) {
+            case "reg"     -> fa.registerClient(BASE_DIR, info);
+            case "tree"    -> fa.clientTree(BASE_DIR, info);
+            case "config"  -> fa.configServer(BASE_DIR, info);
+            case "storage" -> fa.clientStorage(BASE_DIR, info);
+            case "integrity" -> fa.checkIntegrity(BASE_DIR, info, hb, ipAddress, port, ourPort);
+            case "help" -> """
+
+                    \texit - end RMI connection
+                    \treg client password - create new client
+                    \ttree client - check file tree
+                    \tconfig delay max_failed - edit heartbeat configurations
+                    \tstorage (client) - check how much space is being used
+                    \tintegrity - check what files are backed up in 2nd server
+                    
+                    """;
+            default -> "Invalid command";
+        };
     }
 }
