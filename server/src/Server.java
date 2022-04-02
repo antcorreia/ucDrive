@@ -279,7 +279,7 @@ class HeartBeat extends Thread{
 
                     if(hb_cont<0) break;
 
-                } 
+                }
                 catch (IOException | InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -660,46 +660,32 @@ class FileAccess {
 
     private static void integrityTree(boolean isValid, File folder, int indent, StringBuilder string, HeartBeat hb, String ipAddress, int otherPort, int port) throws IOException {
         File[] files = Objects.requireNonNull(folder.listFiles());
-        int count = 0;
 
         for (File file : files) {
-            count++;
             if (file.isDirectory()) {
-                string.append(String.join("", Collections.nCopies(indent, "│  ")));
-                if (!Files.newDirectoryStream(file.toPath()).iterator().hasNext() && count == files.length)
-                    string.append("└──");
-                else
-                    string.append("├──");
+                string.append(String.join("", Collections.nCopies(indent, "|  ")));
+                string.append("+--");
                 string.append(file.getName()).append("/");
                 if (!isValid) {
-                    string.append(" ✘\n");
+                    string.append(" X\n");
                     integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                 }
                 else
-                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
-                        string.append(" ✔\n");
+                    if (!fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
+                        string.append(" X\n");
                         integrityTree(true, file, indent + 1, string, hb, ipAddress, otherPort, port);
-                    }
-                    else{
-                        string.append(" ✘\n");
-                        integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                     }
             }
             else {
-                string.append(String.join("", Collections.nCopies(indent, "│  ")));
-                if (count != files.length)
-                    string.append("├──");
-                else
-                    string.append("└──");
+                string.append(String.join("", Collections.nCopies(indent, "|  ")));
+                string.append("+--");
 
                 if (!isValid){
-                    string.append(file.getName()).append(" ✘\n");
+                    string.append(file.getName()).append(" X\n");
                 }
                 else {
-                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
-                        string.append(file.getName()).append(" ✔\n");
-                    } else {
-                        string.append(file.getName()).append(" ✘\n");
+                    if (!fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
+                        string.append(file.getName()).append(" X\n");
                     }
                 }
             }
