@@ -293,29 +293,36 @@ class FileAccess {
     private boolean updateClientstxt = false;
 
     /**
-     * get user information from clients.txt
-     * @param username username of client
-     * @return arrayslist of string will all info
+     * > Get user information from clients.txt;
+     * @param username username of client;
+     * @return arrayslist of string will all info;
      */
     public synchronized ArrayList<String> getUserInfo(String username) {
-
         ArrayList<String> userinfo = new ArrayList<>();
+
         try {
+            // Initialize variables
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
+
+            // Get client information
             while (reader.hasNextLine()) {
                 String user = reader.nextLine();
                 String[] info = user.split(" / ");
                 if (info[0].equals(username)) {
-                    userinfo.add(info[0]); // username
-                    userinfo.add(info[1]); // pass
-                    userinfo.add(info[2]); // last dir
+                    userinfo.add(info[0]); // Username
+                    userinfo.add(info[1]); // Password
+                    userinfo.add(info[2]); // Last directory
+
                     System.out.printf("DEBUG: Username: %s | Password: %s\n", userinfo.get(0), userinfo.get(1));
                 }
             }
+
+            // Close reader
             reader.close();
-        } catch (FileNotFoundException e) {
+        }
+        catch (FileNotFoundException e) {
             System.out.println("DEBUG: File not found.");
             e.printStackTrace();
         }
@@ -323,150 +330,212 @@ class FileAccess {
     }
 
     /**
-     * changes users password
-     * @param username users username
-     * @param newPassword new password
-     * @return true if change was succefull
+     * > Changes user's password;
+     * @param username users username;
+     * @param newPassword new password;
+     * @return true if change was successful;
      */
     public synchronized boolean changePassword(String username, String newPassword) {
-        // ver se a password é valida?
         ArrayList<String> lines = new ArrayList<>();
         boolean changed = false;
+
         try {
+            // Initialize variables
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
+
+            // Read and edit 'clients.txt'
             while (reader.hasNextLine()) {
                 String user = reader.nextLine();
                 String[] info = user.split(" / ");
+
                 if (info[0].equals(username)) {
                     user = info[0] + " / " + newPassword + " / " + info[2];
                     changed = true;
                 }
+
                 lines.add(user);
             }
+
+            // Close reader
             reader.close();
 
+            // Re-write 'clients.txt'
             FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
-            for (String s: lines) {
-                fileWriter.write(s + "\n");
-            }
+            for (String s: lines) fileWriter.write(s + "\n");
+
+            // Close writer
             fileWriter.close();
 
-        } catch (FileNotFoundException e) {
+        }
+        catch (FileNotFoundException e) {
             System.out.println("An error occurred.");
             e.printStackTrace();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             e.printStackTrace();
         }
+
         return changed;
     }
 
     /**
-     * save users current directory
-     * @param username username of client
-     * @param currentDir directory
-     * @return true if it was succefull
+     * > Save user's current directory;
+     * @param username username of client;
+     * @param currentDir directory;
+     * @return true if it was successful;
      */
     public synchronized boolean saveCurrentDir(String username,String currentDir){
         ArrayList<String> lines = new ArrayList<>();
         boolean changed = false;
+
         try {
+
+            // Initialize variables
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/clients.txt");
             Scanner reader = new Scanner(file);
+
+            // Read and edit 'clients.txt'
             while (reader.hasNextLine()) {
                 String user = reader.nextLine();
                 String[] info = user.split(" / ");
+
                 if (info[0].equals(username)) {
                     user = info[0] + " / " + info[1] + " / " + currentDir;
                     changed = true;
                 }
+
                 lines.add(user);
             }
+
+            // Close reader
             reader.close();
 
+            // Re-write 'clients.txt'
             FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
-            for (String s: lines) {
-                fileWriter.write(s + "\n");
-            }
+            for (String s: lines) fileWriter.write(s + "\n");
+
+            // Close writer
             fileWriter.close();
 
-        } catch (FileNotFoundException e) {
+        }
+        catch (FileNotFoundException e) {
             System.out.println("An error occurred.");
             e.printStackTrace();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             e.printStackTrace();
         }
+
         return changed;
     }
 
     /**
-     * get server configuration ip, port etc
-     * @return arraylist will all information
+     * > Get server configuration;
+     * @return arraylist will all information;
      */
     public synchronized ArrayList<String> getconfig(){
         ArrayList<String> config = new ArrayList<>();
+
         try {
+
+            // Initialize variables
             String BASE_DIR = System.getProperty("user.dir");
             File file = new File(BASE_DIR + "/home/config.txt");
             Scanner reader = new Scanner(file);
+
+            // Go through 'config.txt' file
             while (reader.hasNextLine()) {
                 String line = reader.nextLine();
+
                 if(!line.startsWith("// ")){
                     String[] values = line.split(": ");
-                    if(values.length==2){
-                        config.add(values[1]);
-                    }
-                }
 
+                    if(values.length==2) config.add(values[1]);
+                }
             }
+
+            // Close reader
             reader.close();
-        } catch (FileNotFoundException e) {
+        }
+        catch (FileNotFoundException e) {
             e.printStackTrace();
         }
+
         return config;
     }
 
     /**
-     * see if there is already a clients.txt
-     * @return bool
+     * > See if there is already a clients.txt;
+     * @return bool;
      */
-    public synchronized boolean isUpdateClientstxt() {
-        return !updateClientstxt;
-    }
+    public synchronized boolean isUpdateClientstxt() { return !updateClientstxt; }
 
     /**
-     * update value if clients.txt is inserted or removed of the pipe
+     * > Update value if 'clients.txt' is inserted or removed from the pipe
      */
-    public synchronized void setUpdateClientstxt(boolean updateClientstxt) {
-        this.updateClientstxt = updateClientstxt;
-    }
+    public synchronized void setUpdateClientstxt( boolean updateClientstxt) { this.updateClientstxt = updateClientstxt; }
 
+    /**
+     * > Adds a new client to 'client.txt' and creates a new directory for them;
+     * > Also makes a backup of the new directory in the secondary server;
+     * @param BASE_DIR directory where jar in being run;
+     * @param info command received split in the spaces;
+     * @param fq file queue used for backup;
+     * @return success of failure of the register action;
+     */
     public String registerClient(String BASE_DIR, String[] info, BlockingQueue<String> fq){
         ArrayList<String> lines = new ArrayList<>();
 
-        if (info.length > 3) return "Too many arguments";
-        else if (info.length < 3) return "Not enough arguments";
+        // Check number of arguments
+        if (info.length > 7) return "Too many arguments";
+        else if (info.length < 7) return "Not enough arguments";
+
         try {
             Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/clients.txt"));
+
+            // Store 'clients.txt' lines
             while (fileReader.hasNextLine()) {
                 String line = fileReader.nextLine();
                 lines.add(line);
                 String[] splitLine = line.split(" / ");
 
-                if (Objects.equals(splitLine[0], info[1]))
-                    return "Client already exists";
+                if (Objects.equals(splitLine[0], info[1])) return "Client already exists";
             }
+
+            // Close reader
             fileReader.close();
 
             FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/clients.txt");
+
+            // Re-write 'clients.txt'
             for (String s: lines) fileWriter.write(s + "\n");
-            fileWriter.write(String.format("%s / %s / %s/home\n", info[1], info[2], info[1]));
+
+            // Add new client
+            fileWriter.write(String.format("%s / %s / %s/home / %s / %s / %s / %s\n", info[1], info[2], info[1], info[3], info[4], info[5], info[6]));
+
+            // Backup 'clients.txt'
+            String aux;
+            if (this.isUpdateClientstxt()) {
+                aux = "/home/clients.txt";
+                System.out.println("DEBUG: placing - " + aux + " in queue");
+                fq.put("File");
+                fq.put(aux);
+
+                this.setUpdateClientstxt(true);
+            }
+
+            // Close writer
             fileWriter.close();
+
+            // Create new directory for client
             if (!new File(BASE_DIR + "/home/" + info[1] + "/home").mkdirs())
                 System.out.println("DEBUG: Error creating client folder");
-            String aux = "/home/"  + info[1] + "/home";
+
+            // Backup new directory
+            aux = "/home/" + info[1] + "/home";
             System.out.println("DEBUG: placing - " + aux +" in queue");
             fq.put("Folder");
             fq.put(aux);
@@ -478,16 +547,29 @@ class FileAccess {
         return "New client registered";
     }
 
+    /**
+     * > Recursively builds a file tree on StringBuilder 'string';
+     * @param folder current folder in recursion;
+     * @param indent current indentation in recursion;
+     * @param string string where file tree is being written;
+     */
     private static void fileTree(File folder, int indent, StringBuilder string){
         File[] files = Objects.requireNonNull(folder.listFiles());
 
         for (File file : files) {
             if (file.isDirectory()) {
+
+                // Append current folder with correct indentation
                 string.append(String.join("", Collections.nCopies(indent, "|  ")));
                 string.append("+--");
                 string.append(file.getName()).append("/\n");
+
+                // Recursive call
                 fileTree(file, indent + 1, string);
-            } else {
+            }
+            else {
+
+                // Append current file with correct indentation
                 string.append(String.join("", Collections.nCopies(indent, "|  ")));
                 string.append("+--");
                 string.append(file.getName()).append("\n");
@@ -495,75 +577,114 @@ class FileAccess {
         }
     }
 
+    /**
+     * > Initializes recursive fileTree function with the received client's folder;
+     * @param BASE_DIR directory where jar is being run;
+     * @param info command received split in the spaces;
+     * @return file tree for specific client 'info[1]'
+     */
     public synchronized String clientTree(String BASE_DIR, String[] info){
+        // Check number of arguments
         if (info.length > 2) return "Too many arguments";
         else if (info.length < 2) return "Not enough arguments";
 
         StringBuilder string = new StringBuilder(info[1] + "/\n");
+
+        // Call recursive function
         try {
             fileTree(new File(BASE_DIR + "/home/" + info[1] + "/"), 0, string);
         }
         catch (Exception e){
             return "Client " + info[1] + " doesn't exist";
         }
+
         return string.toString();
     }
 
+    /**
+     * > Edit 'config.txt' to change Heartbeat configuration values;
+     * @param BASE_DIR directory where jar is being run;
+     * @param info command received split by the spaces;
+     * @return success or failure of the configuration action;
+     */
     public synchronized String configServer(String BASE_DIR, String[] info){
+
+        // Check number of arguments
         if (info.length > 3) return "Too many arguments";
         else if (info.length < 3) return "Not enough arguments";
 
         try {
+            // Initialize variables
             ArrayList<String> lines = new ArrayList<>();
             Scanner fileReader = new Scanner(new File(BASE_DIR + "/home/config.txt"));
 
+            // Read and edit 'config.txt'
             while (fileReader.hasNextLine()){
                 String line = fileReader.nextLine();
 
                 String[] splitServerLine = line.split(": ");
-                if (Objects.equals(splitServerLine[0], "DELAY"))
-                    lines.add("DELAY: " + info[1]);
-                else if (Objects.equals(splitServerLine[0], "MAX FAILED"))
-                    lines.add("MAX FAILED: " + info[2]);
-                else
-                    lines.add(line);
+                if (Objects.equals(splitServerLine[0], "DELAY")) lines.add("DELAY: " + info[1]);
+                else if (Objects.equals(splitServerLine[0], "MAX FAILED")) lines.add("MAX FAILED: " + info[2]);
+                else lines.add(line);
             }
+
+            // Close reader
             fileReader.close();
 
+            // Re-write 'config.txt'
             FileWriter fileWriter = new FileWriter(BASE_DIR + "/home/config.txt");
             for (String s: lines) fileWriter.write(s + "\n");
+
+            // Close writer
             fileWriter.close();
         }
         catch (FileNotFoundException e){
             return "Configuration files not found";
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             return "Error while writing to file";
         }
 
         return "Configuration file successfully edited";
     }
 
+    /**
+     * > Recursively get space occupied by a folder;
+     * @param folder folder to get size;
+     * @return size of the folder;
+     * @throws NullPointerException when folder doesn't exist;
+     */
     private static long getFolderSize(File folder) throws NullPointerException{
         long length = 0;
 
+        // Get list of files in folder
         File[] files = folder.listFiles();
 
         assert files != null;
         for (File file : files)
-            if (file.isFile())
-                length += file.length();
-            else
-                length += getFolderSize(file);
+            // Add file size to 'length'
+            if (file.isFile()) length += file.length();
+
+            // Recursive call
+            else length += getFolderSize(file);
 
         return length;
     }
 
+    /**
+     * > Initializes getFolderSize function with either the received client's folder or the absolute server path;
+     * @param BASE_DIR directory where jar is being run;
+     * @param info command received split by the spaces;
+     * @return storage occupied by the received client or by the server
+     */
     public synchronized String clientStorage(String BASE_DIR, String[] info){
+
+        // Check number of arguments
         if (info.length > 2) return "Too many arguments";
         else if (info.length < 1) return "Not enough arguments";
 
-        if (info.length == 1)
-            return "Total space occupied is: " + getFolderSize(new File(BASE_DIR + "/home/")) + " bytes";
+        // Call recursive function
+        if (info.length == 1) return "Total space occupied is: " + getFolderSize(new File(BASE_DIR + "/home/")) + " bytes";
         else
             try {
                 return "Client " + info[1] + " is occupying " + getFolderSize(new File(BASE_DIR + "/home/" + info[1])) + " bytes";
@@ -572,22 +693,26 @@ class FileAccess {
                 return "Client " + info[1] + " doesn't exist";
             }
     }
-    
-    public static boolean fileExists(String filePath, String address, int port, int ourport, HeartBeat HB){
+
+    public static boolean fileExists(String filePath, String address, int port, int ourPort, HeartBeat HB){
         int fExists = 0;
         try {
-            DatagramSocket socket = new DatagramSocket(ourport);
+            DatagramSocket socket = new DatagramSocket(ourPort);
 
-            // Send Path
+            // Initialize variables
             boolean checkPath;
             byte[] filePathBytes = filePath.getBytes();
             byte[] fileP = new byte[filePathBytes.length + 1];
             fileP[0] = (byte) (1);
+
             System.arraycopy(filePathBytes, 0, fileP, 1, filePathBytes.length);
             DatagramPacket filePathPacket = new DatagramPacket(fileP, fileP.length, InetAddress.getByName(address), port);
+
+            // Send packet
             socket.send(filePathPacket);
             System.out.printf("DEBUG: Sent: path %s\n", new String(fileP, 1, fileP.length - 1));
-            // Know if the path was received correctly
+
+            // Check if the path was received correctly
             while (true) {
                 byte[] check = new byte[1];
                 DatagramPacket checkPacket = new DatagramPacket(check, check.length);
@@ -622,7 +747,8 @@ class FileAccess {
                         socket.setSoTimeout(HB.delay * 2);
                         socket.receive(existsPacket);
                         break;
-                    } catch (SocketTimeoutException e) {
+                    }
+                    catch (SocketTimeoutException e) {
                         if (!HB.isAlive()) {
                             System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
                             socket.close();
@@ -639,11 +765,11 @@ class FileAccess {
                 socket.send(ackExistsPacket);
                 System.out.println("DEBUG: Sent type/path acknowledgement: sequence number = " + checkExist[0]);
 
-                if (checkExist[0] == (byte) (1) || checkExist[0] == (byte) (0))
-                    dataFlag = true;
+                if (checkExist[0] == (byte) (1) || checkExist[0] == (byte) (0)) dataFlag = true;
 
             } while (!dataFlag);
 
+            // Close socket
             socket.close();
         }
         catch (IOException e) {
@@ -653,32 +779,57 @@ class FileAccess {
         return fExists == 1;
     }
 
+    /**
+     * > Recursively builds a file tree on StringBuilder 'string' with integrity checks (check if the file/folder
+     *   has or not a backup on the secondary server);
+     * @param isValid indicates if the file/folder's parent had a backup or not (in order to relieve some of the
+     *                pressure on the UDP connection;
+     * @param folder current folder in recursion;
+     * @param indent current indentation in recursion;
+     * @param string string where file tree is being written;
+     * @param hb server heartbeat object
+     * @param ipAddress server ip address
+     * @param otherPort server port
+     * @param port secondary server port
+     */
     private static void integrityTree(boolean isValid, File folder, int indent, StringBuilder string, HeartBeat hb, String ipAddress, int otherPort, int port){
         File[] files = Objects.requireNonNull(folder.listFiles());
 
         for (File file : files) {
             if (file.isDirectory()) {
+                // Append current folder with correct indentation
                 string.append(String.join("", Collections.nCopies(indent, "|  ")));
                 string.append("+--");
                 string.append(file.getName()).append("/");
+
+                // Check if it has a backup
                 if (!isValid) {
                     string.append("  No\n");
+
+                    // Recursive call
                     integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                 }
                 else
                     if (fileExists(file.getPath().substring(System.getProperty("user.dir").length()), ipAddress, otherPort, port, hb)) {
                         string.append("  Yes\n");
+
+                        // Recursive call
                         integrityTree(true, file, indent + 1, string, hb, ipAddress, otherPort, port);
                     }
                     else{
                         string.append("  No\n");
+
+                        // Recursive call
                         integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                     }
             }
             else {
+
+                // Append current file with correct indentation
                 string.append(String.join("", Collections.nCopies(indent, "|  ")));
                 string.append("+--").append(file.getName());
 
+                // Check if it has a backup
                 if (!isValid) string.append("  No\n");
                 else {
                     if (fileExists(file.getPath().substring(System.getProperty("user.dir").length()), ipAddress, otherPort, port, hb))
@@ -690,11 +841,25 @@ class FileAccess {
         }
     }
 
+    /**
+     * Initializes integrityTree function with the absolute server path;
+     * @param BASE_DIR directory where jar is being run;
+     * @param info command received split by the spaces;
+     * @param hb server heartbeat object
+     * @param ipAddress server ip address
+     * @param otherPort server port
+     * @param port secondary server port
+     * @return file tree with respective integrity
+     */
     public synchronized String checkIntegrity(String BASE_DIR, String[] info, HeartBeat hb, String ipAddress, int otherPort, int port){
+
+        // Check  number of arguments
         if (info.length > 1) return "Too many arguments";
         else if (info.length < 1) return "Not enough arguments";
 
         StringBuilder string = new StringBuilder("home/  Yes\n");
+
+        // Call recursive function
         try {
             integrityTree(true, new File(BASE_DIR + "/home/"), 0, string, hb, ipAddress, otherPort, port);
         }
@@ -721,13 +886,17 @@ class Connection extends Thread {
             out = new DataOutputStream(clientSocket.getOutputStream());
             fa = FA;
             fq = f;
+
             this.start();
-        }catch(IOException e){System.out.println("DEBUG: Connection: " + e.getMessage());}
+        }
+        catch(IOException e){
+            System.out.println("DEBUG: Connection: " + e.getMessage());
+        }
     }
 
     /**
-     * runner will be stuck at login until it is confirmed, then enters loop where all commands are handled.
-     * exit or reconnect will break loop
+     * > Runner will be stuck at login until it is confirmed, then enters loop where all commands are handled;
+     * > Exit or reconnect will break loop;
      */
     public void run(){
         try {
@@ -763,40 +932,44 @@ class Connection extends Thread {
     }
 
     /**
-     * retriveis users username and password, stuck in here until it succedes
+     * > Retrieves user's username and password, doesn't leave until it succeeds or is aborted;
      */
     public void login(){
 
         try{
-
+            // Initialize variables
             ArrayList<String> contents = new ArrayList<>();
             boolean foundUsername = false;
             boolean passwordValid = false;
 
+            // Get username
             while(!foundUsername) {
                 out.writeUTF("server - insert username: ");
+
                 contents = fa.getUserInfo(in.readUTF());
-                if(contents.size()==0)
-                    out.writeUTF("server - Username not found\n");
+                if(contents.size()==0) out.writeUTF("server - Username not found\n");
                 else {
                     Username = contents.get(0);
                     foundUsername = true;
                 }
-
             }
+
+            // Get password
             while(!passwordValid) {
                 out.writeUTF("server - insert password: ");
-                if (in.readUTF().equals(contents.get(1)))
-                    passwordValid=true;
-                else
-                    out.writeUTF("server - wrong password\n");
+                if (in.readUTF().equals(contents.get(1))) passwordValid=true;
+                else out.writeUTF("server - wrong password\n");
             }
 
+            // Get last user directory
             currentDir = contents.get(2);
             String BASE_DIR = System.getProperty("user.dir");
             File directory = new File(BASE_DIR + "/home/" + currentDir);
+
+            // Creates user directory if it does not exist
             if (!directory.exists()){
                 System.out.println("DEBUG: " + BASE_DIR + "/home/" + currentDir);
+
                 if (directory.mkdirs()) {
                     System.out.println("DEBUG: Directory has been created successfully");
 
@@ -805,26 +978,26 @@ class Connection extends Thread {
                     fq.put("Folder");
                     fq.put(aux);
                 }
-                else {
-                    System.out.println("DEBUG: Directory cannot be created");
-                }
+                else System.out.println("DEBUG: Directory cannot be created");
             }
-            else
-                System.out.println("DEBUG: Directory already exists");
 
-        } catch (IOException | InterruptedException e) {
+        }
+        catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
     }
 
     /**
-     * new password handler
-     * @return true if all went right
+     * > New password handler;
+     * @return true if everything went right;
      */
     public boolean newPasswordRequest() {
         try {
+            // Ask for new password
             out.writeUTF("server - new password: ");
             String newpass = in.readUTF();
+
+            // Change password
             if(fa.changePassword(Username, newpass)) {
                 if (fa.isUpdateClientstxt()) {
                     fq.put("File");
@@ -837,34 +1010,40 @@ class Connection extends Thread {
         }
         catch(IOException e) {
             System.out.println("IO:" + e);
-        } catch (InterruptedException e) {
+        }
+        catch (InterruptedException e) {
             e.printStackTrace();
         }
+
         return false;
     }
 
     /**
-     * send file to client
-     * @param path path where file is
+     * > Send file to client;
+     * @param path path where file is;
      */
     public void sendFile(String path, ServerSocket s){
         try {
-            Socket cs = s.accept(); // BLOQUEANTE waiting for client
+            Socket cs = s.accept(); // Waiting for client
             System.out.println("DEBUG: connected file transfer socket: " + s);
             DataOutputStream out = new DataOutputStream(cs.getOutputStream());
 
+            // Initialize variables
             int bytes;
             File file = new File(path);
             FileInputStream fileInputStream = new FileInputStream(file);
 
-            // send file size
+            // Send file size
             out.writeLong(file.length());
-            // break file into chunks
+
+            // Break file into chunks
             byte[] buffer = new byte[4 * 1024];
             while ((bytes = fileInputStream.read(buffer)) != -1) {
                 out.write(buffer, 0, bytes);
                 out.flush();
             }
+
+            // Close sockets and stream
             fileInputStream.close();
             cs.close();
             s.close();
@@ -875,37 +1054,41 @@ class Connection extends Thread {
     }
 
     /**
-     * receives file from client
-     * @param fileName name of the file
+     * > Receives file from client;
+     * @param fileName name of the file;
      */
     private void receiveFile(String fileName, int port){
         try {
+            // Create socket
             Socket s = new Socket(clientSocket.getInetAddress(), port);
             System.out.println("DEBUG: connected file transfer socket: " + s);
 
+            // Initialize variables
             DataInputStream in = new DataInputStream(s.getInputStream());
-
             int bytes;
             FileOutputStream fileOutputStream = new FileOutputStream(fileName);
 
-            long size = in.readLong();     // read file size
+            // Read file size
+            long size = in.readLong();
             byte[] buffer = new byte[4 * 1024];
             while (size > 0 && (bytes = in.read(buffer, 0, (int) Math.min(buffer.length, size))) != -1) {
                 fileOutputStream.write(buffer, 0, bytes);
-                size -= bytes;      // read upto file size
+                size -= bytes;      // Read up to file size
             }
+
+            // Close stream and socket
             fileOutputStream.close();
             s.close();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             System.out.println("DEBUG: client disconnected, upload failed");
         }
-
     }
 
     /**
-     * handles all comands received from client
-     * @param command command to be handled
-     * @return text to be displayed in client console or a command to be executed on client side
+     * > Handles all commands received from client;
+     * @param command command to be handled;
+     * @return text to be displayed in client console or a command to be executed on client side;
      */
     public String commandHandler(String command) {
         try {
@@ -920,27 +1103,22 @@ class Connection extends Thread {
                 commands += "\tcd dir - go to dir directory\n";
                 commands += "\tmkdir dir - create dir directory\n";
                 commands += "\tdownload filename /home/path/ - download file to local path\n";
+
                 return commands + "\nserver /" + currentDir + " > ";
             }
 
-            else if(command.equals("server")){
-                return "server /" + currentDir + " > ";
+            else if(command.equals("server")) return "server /" + currentDir + " > ";
+
+            else if(command.equals("rp")) {
+                if (newPasswordRequest()) return "/reconnect";
+                else out.writeUTF("server - an error as ocorrued\nserver /" + currentDir + " > ");
             }
 
-            else if(command.equals("rp")){
-                if(newPasswordRequest()) {
-                    return "/reconnect";
-                }
-                else{
-                    out.writeUTF("server - an error as ocorrued\nserver /" + currentDir + " > ");
-                }
-            }
-
-            else if(command.equals("exit")){
-                return "/exit";
-            }
+            else if(command.equals("exit")) return "/exit";
 
             else if(command.startsWith("cd")){
+
+                // Empty cd command
                 if(command.equals("cd")){
                     currentDir = Username + "/home";
                     fa.saveCurrentDir(Username,currentDir);
@@ -990,7 +1168,6 @@ class Connection extends Thread {
                             return "server - folder doesn't exist\nserver /"  + currentDir + " > ";
                     }
                 }
-
             }
 
             else if (command.startsWith("mkdir ")) {
@@ -1040,8 +1217,7 @@ class Connection extends Thread {
                 StringBuilder output = new StringBuilder();
                 for (File file : Objects.requireNonNull(directory.listFiles())){
                     output.append(file.getName());
-                    if (count % 5 == 0)
-                        output.append("\n");
+                    if (count % 5 == 0) output.append("\n");
                     else {
                         output.append(" ".repeat(Math.max(0, biggestLen - file.getName().length())));
                         output.append("\t");
@@ -1049,8 +1225,7 @@ class Connection extends Thread {
                     count++;
                 }
 
-                if (--count % 5 != 0)
-                    output.append("\n");
+                if (--count % 5 != 0) output.append("\n");
                 output.append("server /").append(currentDir).append(" > ");
 
                 return output.toString();
@@ -1060,15 +1235,17 @@ class Connection extends Thread {
                 String[] info = command.split(" ");
                 String BASE_DIR = System.getProperty("user.dir");
                 File directory = new File(BASE_DIR + "/home/" + currentDir + "/" + info[1]);
-                if (!directory.exists()){
+
+                if (!directory.exists())
                     return "server: file does not exist" +
                             "\nserver /" + currentDir + " > ";
-                }
+
                 ServerSocket s = new ServerSocket(0); // get available port
                 out.writeUTF("/file_download "+info[2]+info[1]+ " " + s.getLocalPort());
 
                 String filepath = BASE_DIR + "/home/" + currentDir +"/"+ info[1];
                 sendFile(filepath,s);
+
                 return "server: download complete\nserver /" + currentDir + " > ";
             }
 
@@ -1085,20 +1262,21 @@ class Connection extends Thread {
                         System.out.println("DEBUG: placing - " + aux +" in queue");
                         fq.put("Folder");
                         fq.put(aux);
-                    } else {
-                        System.out.println("DEBUG: an error ocurred while creating folder");
                     }
-                } else {
-                    receiveFile(BASE_DIR +"/home/"+ Username + info[1], Integer.parseInt(info[2]));
+                    else System.out.println("DEBUG: an error ocurred while creating folder");
                 }
+                else receiveFile(BASE_DIR +"/home/"+ Username + info[1], Integer.parseInt(info[2]));
+
                 String aux = "/home/"+ Username + info[1];
                 System.out.println("DEBUG: placing - " + aux +" in queue");
                 fq.put("File");
                 fq.put(aux);
+
                 return "";
             }
 
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -1110,7 +1288,7 @@ class ConnectionUDP extends Thread {
     private final int serverHierarchy;
     private final String address;
     private final int port;
-    private final int ourport;
+    private final int ourPort;
     private final FileAccess fa;
     private BlockingQueue<String> fq;
     private HeartBeat HB;
@@ -1119,7 +1297,7 @@ class ConnectionUDP extends Thread {
         this.serverHierarchy = serverHierarchy;
         this.address = address;
         this.port = port;
-        this.ourport = otherport;
+        this.ourPort = otherport;
         this.fq = filequeue;
         this.fa = f;
     }
@@ -1127,43 +1305,39 @@ class ConnectionUDP extends Thread {
         this.serverHierarchy = serverHierarchy;
         this.address = address;
         this.port = port;
-        this.ourport = otherport;
+        this.ourPort = otherport;
         this.HB = hb;
         this.fa = f;
     }
 
     /**
-     * runner identifies the hierarchy of the server, so it can be the sender (primary) or the receiver (secondary) of
-     * backup files
+     * > Runner identifies the hierarchy of the server, so it can be the sender (primary) or the
+     *   receiver (secondary) of backup files
      */
     public void run() {
         if (serverHierarchy == 1) {
-            //send
+            // Send
             while (true) {
                 try {
                     String type = fq.take();
                     String path = fq.take();
                     System.out.println("DEBUG: saving file: " + path + " on second server");
                     sendFileUDP(type, path);
-                    if (path.equals("/home/clients.txt"))
-                        fa.setUpdateClientstxt(false);
+                    if (path.equals("/home/clients.txt")) fa.setUpdateClientstxt(false);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
         }
         else {
-            //receive
+            // Receive
             boolean run = true;
-
-            while (run) {
-                run = receiveFileUDP();
-            }
+            while (run) run = receiveFileUDP();
         }
     }
 
     /**
-     * reads a file and converts it to a byte array
+     * > Reads a file and converts it to a byte array
      * @param file file to be read
      * @return byte array of the file
      */
@@ -1171,47 +1345,52 @@ class ConnectionUDP extends Thread {
         byte[] b = new byte[(int) file.length()];
         try {
             FileInputStream fis = new FileInputStream(file);
-            fis.read(b);
+            if (fis.read(b) == -1) System.out.println("DEBUG: Error while reading file");
             fis.close();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             e.printStackTrace();
         }
         return b;
     }
 
     /**
-     * sends a file or directory over UDP
-     * @param fileType type of the file (file or folder)
-     * @param filePath path of the file
+     * > Sends a file or directory over UDP;
+     * @param fileType type of the file (file or folder);
+     * @param filePath path of the file;
      */
     public void sendFileUDP(String fileType, String filePath) {
         System.out.println("DEBUG: Backup Started");
         String type_path = fileType + '_' + filePath;
 
         try {
-            DatagramSocket socket = new DatagramSocket(ourport);
+            DatagramSocket socket = new DatagramSocket(ourPort);
 
-            // Send Type and Path
-            boolean checkTypePath;
+            // Initialize variables
             byte[] fileTypePathBytes = type_path.getBytes();
-            byte[] fileTP = new byte[fileTypePathBytes.length + 1];
+            byte[] fileTP = new byte[type_path.getBytes().length + 1];
             fileTP[0] = (byte) (1);
+
             System.arraycopy(fileTypePathBytes, 0, fileTP, 1, fileTypePathBytes.length);
             DatagramPacket fileTypePathPacket = new DatagramPacket(fileTP, fileTP.length, InetAddress.getByName(address), port);
+
+            // Send packet
             socket.send(fileTypePathPacket);
             System.out.printf("DEBUG: Sent: path %s\n", new String(fileTP, 1, fileTP.length - 1));
-            // Know if the path was received correctly
+
+            // Check if the path was received correctly
             while (true) {
                 byte[] check = new byte[1];
+                boolean checkTypePath = false;
                 DatagramPacket checkPacket = new DatagramPacket(check, check.length);
 
                 try {
+                    // Set timeout
                     socket.setSoTimeout(500);
                     socket.receive(checkPacket);
                     checkTypePath = true;
                 } catch (SocketTimeoutException e) {
                     System.out.println("DEBUG: Socket timed out waiting for acknowledgement");
-                    checkTypePath = false;
                 }
 
                 if ((check[0] == fileTP[0]) && (checkTypePath)) {
@@ -1229,39 +1408,41 @@ class ConnectionUDP extends Thread {
                 File f = new File(System.getProperty("user.dir") + filePath);
                 byte[] fileBytes = readFileToByteArray(f);
 
-                int sequenceNumber = 0; // For order
-                boolean eofFlag; // To see if EOF was reached
-                int ackSequence = 0; // To see if the datagram was received correctly
+                // Initialize variables
+                int sequenceNumber = 0;    // For order
+                boolean eofFlag;           // To see if EOF was reached
+                int ackSequence = 0;       // To see if the datagram was received correctly
+
                 for (int i = 0; i < fileBytes.length; i = i + 1021) {
+
                     // Send part of the file
                     sequenceNumber += 1;
 
-                    byte[] data = new byte[1024]; // First byte: integrety; Second Byte: order; Third Byte: EOF
+                    byte[] data = new byte[1024]; // First byte: integrity; Second Byte: order; Third Byte: EOF
                     data[0] = (byte) (sequenceNumber >> 8);
                     data[1] = (byte) (sequenceNumber);
 
                     if ((i + 1021) >= fileBytes.length) {
                         eofFlag = true;
                         data[2] = (byte) (1);
-                    } else {
+                    }
+                    else {
                         eofFlag = false;
                         data[2] = (byte) (0);
                     }
 
-                    if (!eofFlag) {
-                        System.arraycopy(fileBytes, i, data, 3, 1021);
-                    } else {
-                        System.arraycopy(fileBytes, i, data, 3, fileBytes.length - i);
-                    }
+                    if (!eofFlag) System.arraycopy(fileBytes, i, data, 3, 1021);
+                    else System.arraycopy(fileBytes, i, data, 3, fileBytes.length - i);
 
+                    // Send packet
                     DatagramPacket sendPacket = new DatagramPacket(data, data.length, InetAddress.getByName(address), port);
                     socket.send(sendPacket);
                     System.out.println("DEBUG: Sent: sequence number = " + sequenceNumber);
 
-                    // Know if the part of the file was received correctly
-                    boolean checkReceived;
+                    // Check if the part of the file was received correctly
                     while (true) {
                         byte[] check = new byte[2];
+                        boolean checkReceived = false;
                         DatagramPacket checkPacket = new DatagramPacket(check, check.length);
 
                         try {
@@ -1271,7 +1452,6 @@ class ConnectionUDP extends Thread {
                             checkReceived = true;
                         } catch (SocketTimeoutException e) {
                             System.out.println("DEBUG: Socket timed out waiting for acknowledgement");
-                            checkReceived = false;
                         }
 
                         if ((ackSequence == sequenceNumber) && (checkReceived)) {
@@ -1286,6 +1466,7 @@ class ConnectionUDP extends Thread {
                 }
             }
 
+            // Close socket
             socket.close();
         } catch (SocketException e) {
             System.out.println("DEBUG: Socket UDP Sender: " + e.getMessage());
@@ -1295,14 +1476,14 @@ class ConnectionUDP extends Thread {
     }
 
     /**
-     * receives a file or directory over UDP
-     * @return meant to be true until heartbeat is dead and server needs to become primary
+     * > Receives a file or directory over UDP;
+     * @return meant to be true until heartbeat is dead and server needs to become primary;
      */
     public boolean receiveFileUDP() {
         System.out.println("DEBUG: Backup Started");
 
         try {
-            DatagramSocket socket = new DatagramSocket(ourport);
+            DatagramSocket socket = new DatagramSocket(ourPort);
 
             // Receive Path
             byte[] data;
@@ -1317,7 +1498,8 @@ class ConnectionUDP extends Thread {
                         socket.setSoTimeout(HB.delay * 2);
                         socket.receive(fileTypePathPacket);
                         break;
-                    } catch (SocketTimeoutException e) {
+                    }
+                    catch (SocketTimeoutException e) {
                         if (!HB.isAlive()) {
                             System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
                             socket.close();
@@ -1335,8 +1517,7 @@ class ConnectionUDP extends Thread {
                 socket.send(ackTypePathPacket);
                 System.out.println("DEBUG: Sent type/path acknowledgement: sequence number = " + checkTypePath[0]);
 
-                if (checkTypePath[0] == (byte) (1))
-                    dataFlag = true;
+                if (checkTypePath[0] == (byte) (1)) dataFlag = true;
 
             } while (!dataFlag);
 
@@ -1352,9 +1533,9 @@ class ConnectionUDP extends Thread {
                 File f = new File(System.getProperty("user.dir") + filePath);
                 FileOutputStream fos = new FileOutputStream(f);
 
-                int sequenceNumber; // For order
-                boolean eofFlag; // To see if EOF was reached
-                int foundLast = 0; // To see the last sequence found
+                int sequenceNumber;  // For order
+                boolean eofFlag;     // To see if EOF was reached
+                int foundLast = 0;   // To see the last sequence found
 
                 while (true) {
                     byte[] message = new byte[1024];
@@ -1367,7 +1548,8 @@ class ConnectionUDP extends Thread {
                             socket.setSoTimeout(HB.delay*2);
                             socket.receive(receivedPacket);
                             break;
-                        } catch (SocketTimeoutException e) {
+                        }
+                        catch (SocketTimeoutException e) {
                             if (!HB.isAlive()) {
                                 System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
                                 socket.close();
@@ -1378,6 +1560,7 @@ class ConnectionUDP extends Thread {
 
                     message = receivedPacket.getData();
 
+                    // Make sure that control and sequence bytes are ok
                     sequenceNumber = ((message[0] & 0xff) << 8) + (message[1] & 0xff);
                     eofFlag = (message[2] & 0xff) == 1;
 
@@ -1388,9 +1571,10 @@ class ConnectionUDP extends Thread {
 
                         fos.write(fileByteArray);
                         System.out.println("DEBUG: Received acknowledgement: sequence number: " + foundLast);
-                    } else {
-                        System.out.println("DEBUG: Expected sequence number: " + (foundLast + 1) + " but received " + sequenceNumber + ", discarding this packet");
                     }
+                    else
+                        System.out.println("DEBUG: Expected sequence number: " + (foundLast + 1) + " but received " + sequenceNumber + ", discarding this packet");
+
                     // Send confirmation
                     byte[] checkPacket = new byte[2];
                     checkPacket[0] = (byte) (foundLast >> 8);
@@ -1436,18 +1620,18 @@ class ConnectionUDP extends Thread {
 class IntegrityUDP extends Thread {
     private final String address;
     private final int port;
-    private final int ourport;
+    private final int ourPort;
     private final HeartBeat HB;
 
     public IntegrityUDP(String address, int port, int otherport, HeartBeat hb) {
         this.address = address;
         this.port = port;
-        this.ourport = otherport;
+        this.ourPort = otherport;
         this.HB = hb;
     }
 
     /**
-     * > Runner keeps the function to check integrity running
+     * > Runner keeps the function to check integrity running;
      */
     public void run() {
         // Receive
@@ -1459,20 +1643,20 @@ class IntegrityUDP extends Thread {
     }
 
     /**
-     * > Receives a path over UDP to check if it exists in secondary server
-     * @return meant to be true until heartbeat is dead and server needs to become primary
+     * > Receives a path over UDP to check if it exists in secondary server;
+     * @return meant to be true until heartbeat is dead and server needs to become primary;
      */
     public boolean checkIntegrity() {
         try {
             // Create socket
-            DatagramSocket socket = new DatagramSocket(ourport);
+            DatagramSocket socket = new DatagramSocket(ourPort);
 
             // Initialize variables
             byte[] data;
             DatagramPacket filePathPacket;
             boolean dataFlag = false;
 
-            while (true) {
+            do {
                 byte[] filePathBytes = new byte[1024];
                 filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length);
 
@@ -1482,8 +1666,7 @@ class IntegrityUDP extends Thread {
                         socket.setSoTimeout(HB.delay * 2);
                         socket.receive(filePathPacket);
                         break;
-                    }
-                    catch (SocketTimeoutException e) {
+                    } catch (SocketTimeoutException e) {
                         // Check if primary server is still alive
                         if (!HB.isAlive()) {
                             System.out.println("DEBUG: Closing Integrity Check, HeartBeat has terminated");
@@ -1503,35 +1686,35 @@ class IntegrityUDP extends Thread {
                 System.out.println("DEBUG: Sent path acknowledgement: sequence number = " + checkPath[0]);
 
                 if (checkPath[0] == (byte) (1)) dataFlag = true;
-                if (dataFlag) break;
-            }
+            } while (!dataFlag);
 
             String filePath = new String(data, 1, filePathPacket.getLength() - 1);
             System.out.println("DEBUG: Path received: " + filePath);
 
-            // Send if path exists or not
-            boolean confirmationReceived;
-            byte[] fileExists = new byte[1];
+            // Check if path exists or not
             File f = new File(System.getProperty("user.dir") + filePath);
-            if (f.exists()) {
-                fileExists[0] = (byte) (1);
-            }
+            byte[] fileExists = new byte[1];
+            if (f.exists()) fileExists[0] = (byte) (1);
 
             DatagramPacket fileExistsPacket = new DatagramPacket(fileExists, fileExists.length, InetAddress.getByName(address), port);
             socket.send(fileExistsPacket);
             System.out.println("DEBUG: Sent: file exist value = " + fileExists[0]);
-            // Know if file exist value was received correctly
+
+            // Check if value was received correctly
             while (true) {
                 byte[] check = new byte[1];
+                boolean confirmationReceived = false;
                 DatagramPacket checkPacket = new DatagramPacket(check, check.length);
 
                 try {
+                    // Set socket timeout
                     socket.setSoTimeout(500);
+
+                    // Receive value
                     socket.receive(checkPacket);
                     confirmationReceived = true;
                 } catch (SocketTimeoutException e) {
                     System.out.println("DEBUG: Socket timed out waiting for acknowledgement");
-                    confirmationReceived = false;
                 }
 
                 if ((check[0] == fileExists[0]) && (confirmationReceived)) {
@@ -1544,6 +1727,7 @@ class IntegrityUDP extends Thread {
                 }
             }
 
+            // Close socket
             socket.close();
         } catch (SocketException e) {
             System.out.println("DEBUG: Socket UDP Receiver: " + e.getMessage());
@@ -1591,12 +1775,11 @@ class AdminConsole extends UnicastRemoteObject implements AdminInterface{
             case "help" -> """
 
                     \texit - end RMI connection
-                    \treg client password - create new client
+                    \treg client password faculty address phone CC - create new client
                     \ttree client - check file tree
                     \tconfig delay max_failed - edit heartbeat configurations
                     \tstorage (client) - check how much space is being used
                     \tintegrity - check what files are backed up in 2nd server
-                    
                     """;
             default -> "Invalid command";
         };
