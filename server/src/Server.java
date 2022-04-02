@@ -63,7 +63,7 @@ public class Server{
             integrity.join();
         }
         catch (InterruptedException | UnknownHostException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         // Initializing server as primary
@@ -104,7 +104,7 @@ public class Server{
             System.out.println("DEBUG: an error occurred while enabling RMI port: " + re);
         }
         catch(IOException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
             System.out.println("Listen: " + e.getMessage());
         }
     }
@@ -146,7 +146,7 @@ class HeartBeat extends Thread{
 
         }
         catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
     }
 
@@ -162,7 +162,7 @@ class HeartBeat extends Thread{
                 socket.send(reply);
             }
             catch (IOException e) {
-                e.printStackTrace();
+                System.out.println("DEBUG: Something went wrong");
                 socket.close();
             }
     }
@@ -190,7 +190,7 @@ class HeartBeat extends Thread{
                 pingsend.join();
             }
             catch (InterruptedException e) {
-                e.printStackTrace();
+                System.out.println("DEBUG: Something went wrong");
             }
 
             // Close socket
@@ -243,7 +243,7 @@ class HeartBeat extends Thread{
                     break;
                 }
                 catch (IOException e) {
-                    e.printStackTrace();
+                    System.out.println("DEBUG: Something went wrong");
                 }
         }
     }
@@ -283,7 +283,7 @@ class HeartBeat extends Thread{
 
                 }
                 catch (IOException | InterruptedException e) {
-                    e.printStackTrace();
+                    System.out.println("DEBUG: Something went wrong");
                 }
         }
     }
@@ -324,7 +324,7 @@ class FileAccess {
         }
         catch (FileNotFoundException e) {
             System.out.println("DEBUG: File not found.");
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
         return userinfo;
     }
@@ -371,10 +371,10 @@ class FileAccess {
         }
         catch (FileNotFoundException e) {
             System.out.println("An error occurred.");
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
         catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         return changed;
@@ -423,10 +423,10 @@ class FileAccess {
         }
         catch (FileNotFoundException e) {
             System.out.println("An error occurred.");
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
         catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         return changed;
@@ -461,7 +461,7 @@ class FileAccess {
             reader.close();
         }
         catch (FileNotFoundException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         return config;
@@ -541,7 +541,7 @@ class FileAccess {
             fq.put(aux);
         }
         catch (Exception e){
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         return "New client registered";
@@ -773,7 +773,7 @@ class FileAccess {
             socket.close();
         }
         catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         return fExists == 1;
@@ -983,7 +983,7 @@ class Connection extends Thread {
 
         }
         catch (IOException | InterruptedException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
     }
 
@@ -1012,7 +1012,7 @@ class Connection extends Thread {
             System.out.println("IO:" + e);
         }
         catch (InterruptedException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         return false;
@@ -1058,6 +1058,7 @@ class Connection extends Thread {
      * @param fileName name of the file;
      */
     private void receiveFile(String fileName, int port){
+        FileOutputStream fileOutputStream = null;
         try {
             // Create socket
             Socket s = new Socket(clientSocket.getInetAddress(), port);
@@ -1066,7 +1067,7 @@ class Connection extends Thread {
             // Initialize variables
             DataInputStream in = new DataInputStream(s.getInputStream());
             int bytes;
-            FileOutputStream fileOutputStream = new FileOutputStream(fileName);
+            fileOutputStream = new FileOutputStream(fileName);
 
             // Read file size
             long size = in.readLong();
@@ -1082,6 +1083,16 @@ class Connection extends Thread {
         }
         catch (IOException e) {
             System.out.println("DEBUG: client disconnected, upload failed");
+            try {
+                assert fileOutputStream != null;
+                fileOutputStream.close();
+                File f = new File(fileName);
+                if (f.delete())
+                    System.out.println("DEBUG: file was deleted due to corruption");
+            }
+            catch (IOException ee) {
+                System.out.println("DEBUG: Something went wrong");
+            }
         }
     }
 
@@ -1267,17 +1278,19 @@ class Connection extends Thread {
                 }
                 else receiveFile(BASE_DIR +"/home/"+ Username + info[1], Integer.parseInt(info[2]));
 
-                String aux = "/home/"+ Username + info[1];
-                System.out.println("DEBUG: placing - " + aux +" in queue");
-                fq.put("File");
-                fq.put(aux);
+                if (new File(BASE_DIR +"/home/"+ Username + info[1]).exists()) {
+                    String aux = "/home/" + Username + info[1];
+                    System.out.println("DEBUG: placing - " + aux + " in queue");
+                    fq.put("File");
+                    fq.put(aux);
+                }
 
                 return "";
             }
 
         }
         catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
 
         return "server: invalid command\nserver /" + currentDir + " > ";
@@ -1325,7 +1338,7 @@ class ConnectionUDP extends Thread {
                     sendFileUDP(type, path);
                     if (path.equals("/home/clients.txt")) fa.setUpdateClientstxt(false);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    System.out.println("DEBUG: Something went wrong");
                 }
             }
         }
@@ -1349,7 +1362,7 @@ class ConnectionUDP extends Thread {
             fis.close();
         }
         catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("DEBUG: Something went wrong");
         }
         return b;
     }
@@ -1553,6 +1566,16 @@ class ConnectionUDP extends Thread {
                             if (!HB.isAlive()) {
                                 System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
                                 socket.close();
+
+                                try {
+                                    fos.close();
+                                    if (new File(filePath).delete())
+                                        System.out.println("DEBUG: file was deleted due to corruption");
+                                }
+                                catch (IOException ee) {
+                                    System.out.println("DEBUG: Something went wrong");
+                                }
+
                                 return false;
                             }
                         }

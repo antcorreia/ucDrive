@@ -383,6 +383,7 @@ public class Client {
          * @param port server port;
          */
         private void receiveFile(String fileName, int port){
+            FileOutputStream fileOutputStream = null;
             try {
                 // Create socket
                 Socket s = new Socket(serverAddress, port);
@@ -390,7 +391,7 @@ public class Client {
                 // Initialize variables
                 DataInputStream in = new DataInputStream(s.getInputStream());
                 int bytes;
-                FileOutputStream fileOutputStream = new FileOutputStream(fileName);
+                fileOutputStream = new FileOutputStream(fileName);
 
                 long size = in.readLong();     // Read file size
                 byte[] buffer = new byte[4 * 1024];
@@ -405,6 +406,16 @@ public class Client {
             }
             catch (IOException e) {
                 System.out.println("DEBUG: something went wrong with the download");
+                try {
+                    assert fileOutputStream != null;
+                    fileOutputStream.close();
+                    File f = new File(fileName);
+                    if (f.delete())
+                        System.out.println("DEBUG: file was deleted due to corruption");
+                }
+                catch (IOException ee) {
+                    System.out.println("DEBUG: Something went wrong");
+                }
             }
         }
 
