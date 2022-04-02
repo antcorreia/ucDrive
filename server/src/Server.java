@@ -660,20 +660,26 @@ class FileAccess {
 
     private static void integrityTree(boolean isValid, File folder, int indent, StringBuilder string, HeartBeat hb, String ipAddress, int otherPort, int port) throws IOException {
         File[] files = Objects.requireNonNull(folder.listFiles());
+        int count = 0;
 
         for (File file : files) {
+            count++;
             if (file.isDirectory()) {
                 string.append(String.join("", Collections.nCopies(indent, "|  ")));
                 string.append("+--");
                 string.append(file.getName()).append("/");
                 if (!isValid) {
-                    string.append(" X\n");
+                    string.append("\tNo\n");
                     integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                 }
                 else
-                    if (!fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
-                        string.append(" X\n");
+                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
+                        string.append("\tYes\n");
                         integrityTree(true, file, indent + 1, string, hb, ipAddress, otherPort, port);
+                    }
+                    else{
+                        string.append("\tNo\n");
+                        integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                     }
             }
             else {
@@ -681,11 +687,13 @@ class FileAccess {
                 string.append("+--");
 
                 if (!isValid){
-                    string.append(file.getName()).append(" X\n");
+                    string.append(file.getName()).append("\tNo\n");
                 }
                 else {
-                    if (!fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
-                        string.append(file.getName()).append(" X\n");
+                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
+                        string.append(file.getName()).append("\tYes\n");
+                    } else {
+                        string.append(file.getName()).append("\tNo\n");
                     }
                 }
             }
