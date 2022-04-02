@@ -1,8 +1,6 @@
 import java.net.*;
 import java.io.*;
 
-import java.nio.file.Files;
-
 import java.rmi.RemoteException;
 import java.rmi.registry.*;
 import java.rmi.server.UnicastRemoteObject;
@@ -89,7 +87,7 @@ public class Server{
             System.out.println("DEBUG: Server started at port " + serverPort + " with socket " + listenSocket);
 
             // Enabling RMI
-            AdminConsole rmi = new AdminConsole(FA, HB, otherip, IOtherPort, IPort);
+            AdminConsole rmi = new AdminConsole(FA, HB, filequeue, otherip, IOtherPort, IPort);
             Registry r = LocateRegistry.createRegistry(7001);
             r.rebind("admin", rmi);
 
@@ -160,6 +158,7 @@ class HeartBeat extends Thread{
         while (true)
             try {
                 socket.receive(request);
+                this.reply = new DatagramPacket(request.getData(), request.getLength(), request.getAddress(), request.getPort());
                 socket.send(reply);
             }
             catch (IOException e) {
@@ -229,13 +228,16 @@ class HeartBeat extends Thread{
 
             while(true)
                 try {
-                    // Sets the amount of time to send all ack iterations
+                    // Socket is open enough time to send all ack iterations
                     socket.setSoTimeout(delay*max);
                     hb_cont = hb_default;
                     socket.receive(request);
 
                     int r = Integer.parseInt(new String(request.getData(), 0, request.getLength()));
-                    if(r > Integer.parseInt(message) || hb_cont < 0) break;
+                    if(r > Integer.parseInt(message) || hb_cont < 0) {
+                        hb_cont = -1;
+                        break;
+                    }
                 }
                 catch (SocketTimeoutException e){
                     break;
@@ -431,7 +433,7 @@ class FileAccess {
      * @return bool
      */
     public synchronized boolean isUpdateClientstxt() {
-        return updateClientstxt;
+        return !updateClientstxt;
     }
 
     /**
@@ -441,7 +443,7 @@ class FileAccess {
         this.updateClientstxt = updateClientstxt;
     }
 
-    public String registerClient(String BASE_DIR, String[] info){
+    public String registerClient(String BASE_DIR, String[] info, BlockingQueue<String> fq){
         ArrayList<String> lines = new ArrayList<>();
 
         if (info.length > 3) return "Too many arguments";
@@ -464,6 +466,10 @@ class FileAccess {
             fileWriter.close();
             if (!new File(BASE_DIR + "/home/" + info[1] + "/home").mkdirs())
                 System.out.println("DEBUG: Error creating client folder");
+            String aux = "/home/"  + info[1] + "/home";
+            System.out.println("DEBUG: placing - " + aux +" in queue");
+            fq.put("Folder");
+            fq.put(aux);
         }
         catch (Exception e){
             e.printStackTrace();
@@ -472,7 +478,7 @@ class FileAccess {
         return "New client registered";
     }
 
-    private static void fileTree(File folder, int indent, StringBuilder string) throws IOException {
+    private static void fileTree(File folder, int indent, StringBuilder string){
         File[] files = Objects.requireNonNull(folder.listFiles());
 
         for (File file : files) {
@@ -542,6 +548,7 @@ class FileAccess {
 
         File[] files = folder.listFiles();
 
+        assert files != null;
         for (File file : files)
             if (file.isFile())
                 length += file.length();
@@ -607,12 +614,12 @@ class FileAccess {
             byte[] data = new byte[1];
             DatagramPacket existsPacket;
             boolean dataFlag = false;
-            while (true) {
+            do {
                 existsPacket = new DatagramPacket(data, data.length);
 
                 while (true) {
                     try {
-                        socket.setSoTimeout(HB.delay*2);
+                        socket.setSoTimeout(HB.delay * 2);
                         socket.receive(existsPacket);
                         break;
                     } catch (SocketTimeoutException e) {
@@ -635,10 +642,7 @@ class FileAccess {
                 if (checkExist[0] == (byte) (1) || checkExist[0] == (byte) (0))
                     dataFlag = true;
 
-                if (dataFlag) {
-                    break;
-                }
-            }
+            } while (!dataFlag);
 
             socket.close();
         }
@@ -649,7 +653,7 @@ class FileAccess {
         return fExists == 1;
     }
 
-    private static void integrityTree(boolean isValid, File folder, int indent, StringBuilder string, HeartBeat hb, String ipAddress, int otherPort, int port) throws IOException {
+    private static void integrityTree(boolean isValid, File folder, int indent, StringBuilder string, HeartBeat hb, String ipAddress, int otherPort, int port){
         File[] files = Objects.requireNonNull(folder.listFiles());
 
         for (File file : files) {
@@ -822,7 +826,7 @@ class Connection extends Thread {
             out.writeUTF("server - new password: ");
             String newpass = in.readUTF();
             if(fa.changePassword(Username, newpass)) {
-                if (!fa.isUpdateClientstxt()) {
+                if (fa.isUpdateClientstxt()) {
                     fq.put("File");
                     fq.put("/home/clients.txt");
                     fa.setUpdateClientstxt(true);
@@ -847,10 +851,9 @@ class Connection extends Thread {
         try {
             Socket cs = s.accept(); // BLOQUEANTE waiting for client
             System.out.println("DEBUG: connected file transfer socket: " + s);
-            DataInputStream in = new DataInputStream(cs.getInputStream());
             DataOutputStream out = new DataOutputStream(cs.getOutputStream());
 
-            int bytes = 0;
+            int bytes;
             File file = new File(path);
             FileInputStream fileInputStream = new FileInputStream(file);
 
@@ -882,7 +885,7 @@ class Connection extends Thread {
 
             DataInputStream in = new DataInputStream(s.getInputStream());
 
-            int bytes = 0;
+            int bytes;
             FileOutputStream fileOutputStream = new FileOutputStream(fileName);
 
             long size = in.readLong();     // read file size
@@ -941,7 +944,7 @@ class Connection extends Thread {
                 if(command.equals("cd")){
                     currentDir = Username + "/home";
                     fa.saveCurrentDir(Username,currentDir);
-                    if (!fa.isUpdateClientstxt()) {
+                    if (fa.isUpdateClientstxt()) {
                         fq.put("File");
                         fq.put("/home/clients.txt");
                         fa.setUpdateClientstxt(true);
@@ -953,7 +956,7 @@ class Connection extends Thread {
                     if(nextCommand.equals(" ..")){
                         if(currentDir.equals(Username + "/home")){
                             fa.saveCurrentDir(Username,currentDir);
-                            if (!fa.isUpdateClientstxt()) {
+                            if (fa.isUpdateClientstxt()) {
                                 fq.put("File");
                                 fq.put("/home/clients.txt");
                                 fa.setUpdateClientstxt(true);
@@ -962,7 +965,7 @@ class Connection extends Thread {
                         }
                         currentDir = currentDir.substring(0,currentDir.lastIndexOf("/"));
                         fa.saveCurrentDir(Username,currentDir);
-                        if (!fa.isUpdateClientstxt()) {
+                        if (fa.isUpdateClientstxt()) {
                             fq.put("File");
                             fq.put("/home/clients.txt");
                             fa.setUpdateClientstxt(true);
@@ -976,7 +979,7 @@ class Connection extends Thread {
                         if (directory.exists()) {
                             currentDir = currentDir + "/" + nextDir;
                             fa.saveCurrentDir(Username,currentDir);
-                            if (!fa.isUpdateClientstxt()) {
+                            if (fa.isUpdateClientstxt()) {
                                 fq.put("File");
                                 fq.put("/home/clients.txt");
                                 fa.setUpdateClientstxt(true);
@@ -1000,7 +1003,7 @@ class Connection extends Thread {
                         System.out.println("DEBUG: Directory has been created successfully");
                         currentDir = currentDir + "/" + newFolder;
                         fa.saveCurrentDir(Username,currentDir);
-                        if (!fa.isUpdateClientstxt()) {
+                        if (fa.isUpdateClientstxt()) {
                             fq.put("File");
                             fq.put("/home/clients.txt");
                             fa.setUpdateClientstxt(true);
@@ -1034,7 +1037,7 @@ class Connection extends Thread {
                         biggestLen = file.getName().length();
 
                 int count = 1;
-                StringBuilder output = new StringBuilder("");
+                StringBuilder output = new StringBuilder();
                 for (File file : Objects.requireNonNull(directory.listFiles())){
                     output.append(file.getName());
                     if (count % 5 == 0)
@@ -1104,11 +1107,11 @@ class Connection extends Thread {
 }
 
 class ConnectionUDP extends Thread {
-    private int serverHierarchy;
-    private String address;
-    private int port;
-    private int ourport;
-    private FileAccess fa;
+    private final int serverHierarchy;
+    private final String address;
+    private final int port;
+    private final int ourport;
+    private final FileAccess fa;
     private BlockingQueue<String> fq;
     private HeartBeat HB;
 
@@ -1305,13 +1308,13 @@ class ConnectionUDP extends Thread {
             byte[] data;
             DatagramPacket fileTypePathPacket;
             boolean dataFlag = false;
-            while (true) {
+            do {
                 byte[] fileTypePathBytes = new byte[1024];
                 fileTypePathPacket = new DatagramPacket(fileTypePathBytes, fileTypePathBytes.length);
 
                 while (true) {
                     try {
-                        socket.setSoTimeout(HB.delay*2);
+                        socket.setSoTimeout(HB.delay * 2);
                         socket.receive(fileTypePathPacket);
                         break;
                     } catch (SocketTimeoutException e) {
@@ -1335,10 +1338,7 @@ class ConnectionUDP extends Thread {
                 if (checkTypePath[0] == (byte) (1))
                     dataFlag = true;
 
-                if (dataFlag) {
-                    break;
-                }
-            }
+            } while (!dataFlag);
 
 
             String fileTypePath = new String(data, 1, fileTypePathPacket.getLength()-1);
@@ -1352,7 +1352,7 @@ class ConnectionUDP extends Thread {
                 File f = new File(System.getProperty("user.dir") + filePath);
                 FileOutputStream fos = new FileOutputStream(f);
 
-                int sequenceNumber = 0; // For order
+                int sequenceNumber; // For order
                 boolean eofFlag; // To see if EOF was reached
                 int foundLast = 0; // To see the last sequence found
 
@@ -1434,11 +1434,10 @@ class ConnectionUDP extends Thread {
 }
 
 class IntegrityUDP extends Thread {
-    private String address;
-    private int port;
-    private int ourport;
-    private HeartBeat HB;
-
+    private final String address;
+    private final int port;
+    private final int ourport;
+    private final HeartBeat HB;
 
     public IntegrityUDP(String address, int port, int otherport, HeartBeat hb) {
         this.address = address;
@@ -1448,41 +1447,44 @@ class IntegrityUDP extends Thread {
     }
 
     /**
-     * runner keeps the function to check integrity running
+     * > Runner keeps the function to check integrity running
      */
     public void run() {
-        //receive
+        // Receive
         boolean run = true;
 
         System.out.println("DEBUG: Opening Integrity Check");
-        while (run) {
-            run = checkIntegrity();
-        }
+        while (run) run = checkIntegrity();
         System.out.println("DEBUG: Closing Integrity Check");
     }
 
     /**
-     * receives a path over UDP to check if it exists in secondary server
+     * > Receives a path over UDP to check if it exists in secondary server
      * @return meant to be true until heartbeat is dead and server needs to become primary
      */
     public boolean checkIntegrity() {
         try {
+            // Create socket
             DatagramSocket socket = new DatagramSocket(ourport);
 
-            // Receive Path
+            // Initialize variables
             byte[] data;
             DatagramPacket filePathPacket;
             boolean dataFlag = false;
+
             while (true) {
                 byte[] filePathBytes = new byte[1024];
                 filePathPacket = new DatagramPacket(filePathBytes, filePathBytes.length);
 
                 while (true) {
                     try {
-                        socket.setSoTimeout(HB.delay*2);
+                        // Receive path
+                        socket.setSoTimeout(HB.delay * 2);
                         socket.receive(filePathPacket);
                         break;
-                    } catch (SocketTimeoutException e) {
+                    }
+                    catch (SocketTimeoutException e) {
+                        // Check if primary server is still alive
                         if (!HB.isAlive()) {
                             System.out.println("DEBUG: Closing Integrity Check, HeartBeat has terminated");
                             socket.close();
@@ -1500,16 +1502,11 @@ class IntegrityUDP extends Thread {
                 socket.send(ackPathPacket);
                 System.out.println("DEBUG: Sent path acknowledgement: sequence number = " + checkPath[0]);
 
-                if (checkPath[0] == (byte) (1))
-                    dataFlag = true;
-
-                if (dataFlag) {
-                    break;
-                }
+                if (checkPath[0] == (byte) (1)) dataFlag = true;
+                if (dataFlag) break;
             }
 
-
-            String filePath = new String(data, 1, filePathPacket.getLength()-1);
+            String filePath = new String(data, 1, filePathPacket.getLength() - 1);
             System.out.println("DEBUG: Path received: " + filePath);
 
             // Send if path exists or not
@@ -1561,25 +1558,32 @@ class IntegrityUDP extends Thread {
 class AdminConsole extends UnicastRemoteObject implements AdminInterface{
     private final FileAccess fa;
     private final HeartBeat hb;
+    private final BlockingQueue<String> fq;
     private final String ipAddress;
     private final int port;
     private final int ourPort;
 
-    public AdminConsole(FileAccess FA, HeartBeat HB, String ipAddress, int port, int ourPort) throws RemoteException {
+    public AdminConsole(FileAccess FA, HeartBeat HB, BlockingQueue<String> FQ, String ipAddress, int port, int ourPort) throws RemoteException {
         super();
+
         this.fa = FA;
         this.hb = HB;
+        this.fq = FQ;
         this.ipAddress = ipAddress;
         this.port = port;
         this.ourPort = ourPort;
     }
 
     public String adminCommandHandler(String command){
+        // Split command
         String[] info = command.split(" ");
+
+        // Get absolute path for directory where jar is running
         String BASE_DIR = System.getProperty("user.dir");
 
+        // Get command response
         return switch (info[0]) {
-            case "reg"     -> fa.registerClient(BASE_DIR, info);
+            case "reg"     -> fa.registerClient(BASE_DIR, info, fq);
             case "tree"    -> fa.clientTree(BASE_DIR, info);
             case "config"  -> fa.configServer(BASE_DIR, info);
             case "storage" -> fa.clientStorage(BASE_DIR, info);
