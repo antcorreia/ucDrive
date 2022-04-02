@@ -474,24 +474,16 @@ class FileAccess {
 
     private static void fileTree(File folder, int indent, StringBuilder string) throws IOException {
         File[] files = Objects.requireNonNull(folder.listFiles());
-        int count = 0;
 
         for (File file : files) {
-            count++;
             if (file.isDirectory()) {
-                string.append(String.join("", Collections.nCopies(indent, "│  ")));
-                if (!Files.newDirectoryStream(file.toPath()).iterator().hasNext() && count == files.length)
-                    string.append("└──");
-                else
-                    string.append("├──");
+                string.append(String.join("", Collections.nCopies(indent, "|  ")));
+                string.append("+--");
                 string.append(file.getName()).append("/\n");
                 fileTree(file, indent + 1, string);
             } else {
-                string.append(String.join("", Collections.nCopies(indent, "│  ")));
-                if (count != files.length)
-                    string.append("├──");
-                else
-                    string.append("└──");
+                string.append(String.join("", Collections.nCopies(indent, "|  ")));
+                string.append("+--");
                 string.append(file.getName()).append("\n");
             }
         }
@@ -660,41 +652,36 @@ class FileAccess {
 
     private static void integrityTree(boolean isValid, File folder, int indent, StringBuilder string, HeartBeat hb, String ipAddress, int otherPort, int port) throws IOException {
         File[] files = Objects.requireNonNull(folder.listFiles());
-        int count = 0;
 
         for (File file : files) {
-            count++;
             if (file.isDirectory()) {
                 string.append(String.join("", Collections.nCopies(indent, "|  ")));
                 string.append("+--");
                 string.append(file.getName()).append("/");
                 if (!isValid) {
-                    string.append("\tNo\n");
+                    string.append("  No\n");
                     integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                 }
                 else
                     if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
-                        string.append("\tYes\n");
+                        string.append("  Yes\n");
                         integrityTree(true, file, indent + 1, string, hb, ipAddress, otherPort, port);
                     }
                     else{
-                        string.append("\tNo\n");
+                        string.append("  No\n");
                         integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                     }
             }
             else {
                 string.append(String.join("", Collections.nCopies(indent, "|  ")));
-                string.append("+--");
+                string.append("+--").append(file.getName());
 
-                if (!isValid){
-                    string.append(file.getName()).append("\tNo\n");
-                }
+                if (!isValid) string.append("  No\n");
                 else {
-                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
-                        string.append(file.getName()).append("\tYes\n");
-                    } else {
-                        string.append(file.getName()).append("\tNo\n");
-                    }
+                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb))
+                        string.append("  Yes\n");
+                    else
+                        string.append("  No\n");
                 }
             }
         }
@@ -704,7 +691,7 @@ class FileAccess {
         if (info.length > 1) return "Too many arguments";
         else if (info.length < 1) return "Not enough arguments";
 
-        StringBuilder string = new StringBuilder("home ✔/\n");
+        StringBuilder string = new StringBuilder("home/  Yes\n");
         try {
             integrityTree(true, new File(BASE_DIR + "/home/"), 0, string, hb, ipAddress, otherPort, port);
         }
