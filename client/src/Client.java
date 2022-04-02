@@ -25,7 +25,14 @@ public class Client {
 
             ArrayList<String> connectionInfo = getConnectionInfo(sc);
             serverAddress = connectionInfo.get(0);
-            int serverSocket = Integer.parseInt(connectionInfo.get(1));
+            int serverSocket = 0;
+            try {
+                serverSocket = Integer.parseInt(connectionInfo.get(1));
+            }
+            catch (NumberFormatException e){
+                System.out.println("ucdrive - invalid port");
+                reconnect = 2;
+            }
 
             while (reconnect == 1) {
 

@@ -1564,17 +1564,18 @@ class ConnectionUDP extends Thread {
                         }
                         catch (SocketTimeoutException e) {
                             if (!HB.isAlive()) {
-                                System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
-                                socket.close();
 
                                 try {
                                     fos.close();
-                                    if (new File(filePath).delete())
+                                    if (new File(System.getProperty("user.dir")+filePath).delete())
                                         System.out.println("DEBUG: file was deleted due to corruption");
                                 }
                                 catch (IOException ee) {
                                     System.out.println("DEBUG: Something went wrong");
                                 }
+
+                                System.out.println("DEBUG: Closing Backup, HeartBeat has terminated");
+                                socket.close();
 
                                 return false;
                             }
