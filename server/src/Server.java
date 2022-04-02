@@ -646,7 +646,6 @@ class FileAccess {
             e.printStackTrace();
         }
 
-        System.out.println(fExists);
         return fExists == 1;
     }
 
@@ -663,7 +662,7 @@ class FileAccess {
                     integrityTree(false, file, indent + 1, string, hb, ipAddress, otherPort, port);
                 }
                 else
-                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb)) {
+                    if (fileExists(file.getPath().substring(System.getProperty("user.dir").length()), ipAddress, otherPort, port, hb)) {
                         string.append("  Yes\n");
                         integrityTree(true, file, indent + 1, string, hb, ipAddress, otherPort, port);
                     }
@@ -678,7 +677,7 @@ class FileAccess {
 
                 if (!isValid) string.append("  No\n");
                 else {
-                    if (fileExists(file.getPath(), ipAddress, otherPort, port, hb))
+                    if (fileExists(file.getPath().substring(System.getProperty("user.dir").length()), ipAddress, otherPort, port, hb))
                         string.append("  Yes\n");
                     else
                         string.append("  No\n");
@@ -1516,7 +1515,7 @@ class IntegrityUDP extends Thread {
             // Send if path exists or not
             boolean confirmationReceived;
             byte[] fileExists = new byte[1];
-            File f = new File(filePath);
+            File f = new File(System.getProperty("user.dir") + filePath);
             if (f.exists()) {
                 fileExists[0] = (byte) (1);
             }
